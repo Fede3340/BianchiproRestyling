@@ -1,0 +1,318 @@
+import { useState } from 'react';
+import { ShoppingCart, X, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
+import { ImageWithFallback } from './figma/ImageWithFallback';
+import CheckoutModal from './CheckoutModal';
+import { toast } from 'sonner@2.0.3';
+
+interface CartItem {
+  id: string;
+  name: string;
+  price: number;
+  quantity: number;
+  image: string;
+  options?: string[];
+  accessories?: { name: string; price: number }[];
+}
+
+interface CartDrawerProps {
+  items: CartItem[];
+  onRemoveItem: (id: string) => void;
+  onUpdateQuantity: (id: string, quantity: number) => void;
+  onClearCart: () => void;
+  isExpanded: boolean;
+  setIsExpanded: (expanded: boolean) => void;
+}
+
+export default function CartDrawer({ items, onRemoveItem, onUpdateQuantity, onClearCart, isExpanded, setIsExpanded }: CartDrawerProps) {
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
+  
+  const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
+  const totalPrice = items.reduce((sum, item) => {
+    const accessoriesPrice = item.accessories?.reduce((acc, a) => acc + a.price, 0) || 0;
+    return sum + (item.price + accessoriesPrice) * item.quantity;
+  }, 0);
+  
+  const totalWithVat = totalPrice * 1.22;
+  
+  const handleCheckoutSuccess = (orderId: string) => {
+    toast.success('🎉 Pagamento completato!', {
+      description: `Ordine ${orderId} confermato. Riceverai una email di conferma.`,
+      duration: 5000,
+    });
+    onClearCart();
+    setCheckoutOpen(false);
+  };
+
+  // Se il carrello è vuoto, mostra solo l'expanded drawer quando richiesto
+  if (items.length === 0) {
+    return (
+      <div 
+        className={`fixed inset-0 z-50 transition-all duration-300 ${
+          isExpanded ? 'pointer-events-auto' : 'pointer-events-none'
+        }`}
+      >
+        {/* Backdrop */}
+        <div 
+          className={`absolute inset-0 bg-black transition-opacity duration-300 ${
+            isExpanded ? 'opacity-50' : 'opacity-0'
+          }`}
+          onClick={() => setIsExpanded(false)}
+        />
+
+        {/* Drawer content */}
+        <div 
+          className={`absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-2xl transition-transform duration-300 max-h-[80vh] flex flex-col ${
+            isExpanded ? 'translate-y-0' : 'translate-y-full'
+          }`}
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between p-4 border-b-2 border-gray-200 bg-gray-50 rounded-t-2xl">
+            <div className="flex items-center space-x-3">
+              <ShoppingCart className="w-6 h-6 text-gray-700" />
+              <h2 className="text-lg font-extrabold text-gray-900">Il Tuo Carrello</h2>
+            </div>
+            
+            <button
+              onClick={() => setIsExpanded(false)}
+              className="p-2 hover:bg-gray-200 rounded-full transition-colors"
+            >
+              <X className="w-6 h-6 text-gray-700" />
+            </button>
+          </div>
+
+          {/* Empty state */}
+          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
+            <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+              <ShoppingCart className="w-12 h-12 text-gray-400" />
+            </div>
+            <h3 className="text-xl font-bold text-gray-900 mb-2">Il tuo carrello è vuoto</h3>
+            <p className="text-gray-600 mb-6">Aggiungi prodotti per iniziare i tuoi acquisti</p>
+            <button
+              onClick={() => setIsExpanded(false)}
+              className="py-3 px-6 rounded-lg bg-green-500 text-white font-extrabold text-sm hover:bg-green-600 transition-colors"
+            >
+              Continua lo shopping
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {/* Mini bar - PIÙ VISIBILE CON GRIGIO CHIARO E BORDO SCURO */}
+      <div 
+        className={`fixed bottom-0 left-0 right-0 z-40 transition-all duration-300 ${
+          isExpanded ? 'translate-y-full' : 'translate-y-0'
+        }`}
+      >
+        <div className="bg-gray-100 text-gray-900 shadow-xl border-t-2 border-gray-400">
+          <button
+            onClick={() => setIsExpanded(true)}
+            className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-200/70 transition-colors"
+          >
+            <div className="flex items-center space-x-3">
+              <div className="relative">
+                <ShoppingCart className="w-5 h-5 text-gray-700" />
+                <span className="absolute -top-2 -right-2 bg-green-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center shadow-sm">
+                  {totalItems}
+                </span>
+              </div>
+              <div className="text-left">
+                <div className="text-sm font-bold text-gray-900">Carrello</div>
+                <div className="text-xs font-semibold text-gray-700">{totalItems} {totalItems === 1 ? 'articolo' : 'articoli'}</div>
+              </div>
+            </div>
+            
+            <div className="flex items-center space-x-3">
+              <div className="text-right">
+                <div className="text-lg font-extrabold text-gray-900">€ {totalPrice.toFixed(2)}</div>
+                <div className="text-xs font-semibold text-gray-700">Totale</div>
+              </div>
+              <ChevronUp className="w-5 h-5 text-gray-700" />
+            </div>
+          </button>
+        </div>
+      </div>
+
+      {/* Expanded drawer */}
+      <div 
+        className={`fixed inset-0 z-50 transition-all duration-300 ${
+          isExpanded ? 'pointer-events-auto' : 'pointer-events-none'
+        }`}
+      >
+        {/* Backdrop */}
+        <div 
+          className={`absolute inset-0 bg-black transition-opacity duration-300 ${
+            isExpanded ? 'opacity-50' : 'opacity-0'
+          }`}
+          onClick={() => setIsExpanded(false)}
+        />
+
+        {/* Drawer content */}
+        <div 
+          className={`absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-2xl transition-transform duration-300 max-h-[80vh] flex flex-col ${
+            isExpanded ? 'translate-y-0' : 'translate-y-full'
+          }`}
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between p-4 border-b-2 border-gray-200 bg-gray-50 rounded-t-2xl">
+            <div className="flex items-center space-x-3">
+              <div className="relative">
+                <ShoppingCart className="w-6 h-6 text-gray-700" />
+                <span className="absolute -top-2 -right-2 bg-green-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                  {totalItems}
+                </span>
+              </div>
+              <h2 className="text-lg font-extrabold text-gray-900">Il Tuo Carrello</h2>
+            </div>
+            
+            <button
+              onClick={() => setIsExpanded(false)}
+              className="p-2 hover:bg-gray-200 rounded-full transition-colors"
+            >
+              <ChevronDown className="w-6 h-6 text-gray-700" />
+            </button>
+          </div>
+
+          {/* Cart items - Scrollable */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            {items.map((item) => {
+              const accessoriesPrice = item.accessories?.reduce((acc, a) => acc + a.price, 0) || 0;
+              const itemTotal = (item.price + accessoriesPrice) * item.quantity;
+              
+              return (
+                <div key={item.id} className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                  <div className="flex gap-3">
+                    {/* Image */}
+                    <div className="w-20 h-20 bg-white rounded border border-gray-200 flex-shrink-0 overflow-hidden">
+                      <ImageWithFallback
+                        src={item.image}
+                        alt={item.name}
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+
+                    {/* Details */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex justify-between items-start gap-2">
+                        <h3 className="text-sm font-bold text-gray-900 leading-tight">{item.name}</h3>
+                        <button
+                          onClick={() => onRemoveItem(item.id)}
+                          className="p-1 hover:bg-red-50 rounded transition-colors flex-shrink-0"
+                        >
+                          <Trash2 className="w-4 h-4 text-red-500" />
+                        </button>
+                      </div>
+
+                      {/* Options */}
+                      {item.options && item.options.length > 0 && (
+                        <div className="mt-1 text-xs text-gray-600 font-medium">
+                          {item.options.join(' • ')}
+                        </div>
+                      )}
+
+                      {/* Accessories - ESPANSO CON DETTAGLI */}
+                      {item.accessories && item.accessories.length > 0 && (
+                        <div className="mt-1.5 space-y-0.5">
+                          <div className="text-xs text-green-700 font-bold">
+                            + {item.accessories.length} {item.accessories.length === 1 ? 'accessorio' : 'accessori'}:
+                          </div>
+                          {item.accessories.map((acc, idx) => (
+                            <div key={idx} className="text-xs text-gray-600 font-medium pl-2">
+                              • {acc.name} (+€ {acc.price.toFixed(2)})
+                            </div>
+                          ))}
+                          <div className="text-xs text-green-700 font-extrabold pl-2">
+                            Totale accessori: € {accessoriesPrice.toFixed(2)}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Price and quantity */}
+                      <div className="mt-2 flex items-center justify-between">
+                        <div className="flex items-center border border-gray-300 rounded">
+                          <button
+                            onClick={() => onUpdateQuantity(item.id, Math.max(1, item.quantity - 1))}
+                            className="w-8 h-8 bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold text-lg"
+                          >
+                            −
+                          </button>
+                          <span className="w-10 h-8 flex items-center justify-center text-sm font-bold bg-white">
+                            {item.quantity}
+                          </span>
+                          <button
+                            onClick={() => onUpdateQuantity(item.id, item.quantity + 1)}
+                            className="w-8 h-8 bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold text-lg"
+                          >
+                            +
+                          </button>
+                        </div>
+
+                        <div className="text-right">
+                          <div className="text-base font-extrabold text-gray-900">€ {itemTotal.toFixed(2)}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Footer - Total and actions */}
+          <div className="border-t-2 border-gray-200 bg-white p-4 space-y-3">
+            {/* Summary */}
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm font-semibold text-gray-700">
+                <span>Subtotale ({totalItems} {totalItems === 1 ? 'articolo' : 'articoli'})</span>
+                <span>€ {totalPrice.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-sm font-semibold text-gray-700">
+                <span>IVA (22%)</span>
+                <span>€ {(totalPrice * 0.22).toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-lg font-extrabold text-gray-900 pt-2 border-t border-gray-200">
+                <span>Totale</span>
+                <span>€ {(totalPrice * 1.22).toFixed(2)}</span>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={onClearCart}
+                className="py-3 px-4 rounded-lg border-2 border-gray-300 bg-white text-gray-700 font-bold text-sm hover:bg-gray-50 transition-colors"
+              >
+                Svuota
+              </button>
+              <button 
+                onClick={() => setCheckoutOpen(true)}
+                className="py-3 px-4 rounded-lg bg-green-600 text-white font-extrabold text-sm hover:bg-green-700 transition-colors shadow-lg hover:shadow-xl"
+              >
+                Procedi al Pagamento
+              </button>
+            </div>
+
+            <button
+              onClick={() => setIsExpanded(false)}
+              className="w-full py-2 text-sm font-bold text-gray-600 hover:text-gray-800"
+            >
+              Continua lo shopping
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Checkout Modal */}
+      <CheckoutModal 
+        isOpen={checkoutOpen}
+        onClose={() => setCheckoutOpen(false)}
+        total={totalWithVat}
+        items={items}
+        onSuccess={handleCheckoutSuccess}
+      />
+    </>
+  );
+}
