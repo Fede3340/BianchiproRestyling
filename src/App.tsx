@@ -14,6 +14,7 @@ import mainImage from "figma:asset/f4ed0b934aabb9cdf06af64854509a5ac97f8256.png"
 import { toast } from 'sonner@2.0.3';
 import { Toaster } from './components/ui/sonner';
 import BackendStatus from './components/BackendStatus';
+import AppErrorBoundary from './components/AppErrorBoundary';
 
 interface CartItem {
   id: string;
@@ -198,6 +199,7 @@ export default function App() {
   const totalCartItems = cartItems.reduce((sum, item) => sum + item.quantity, 0);
 
   return (
+    <AppErrorBoundary>
     <div className="min-h-screen bg-gray-50 overflow-x-hidden">
       <Header 
         cartItemCount={totalCartItems} 
@@ -289,5 +291,6 @@ export default function App() {
       {/* Backend Status Indicator */}
       <BackendStatus />
     </div>
+    </AppErrorBoundary>
   );
 }

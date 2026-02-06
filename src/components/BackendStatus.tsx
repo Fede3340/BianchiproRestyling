@@ -10,7 +10,16 @@ export default function BackendStatus() {
       try {
         const response = await fetch('/.netlify/functions/preventivo');
 
-        if (response.ok) {
+        const healthGet = await fetch('/.netlify/functions/preventivo', { method: 'GET' });
+        const health = healthGet.ok
+          ? healthGet
+          : await fetch('/.netlify/functions/preventivo', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ items: [] }),
+            });
+
+        if (health.ok) {
           setBackendStatus('online');
           
           setStripeConfigured(isStripeConfigured());
@@ -29,8 +38,7 @@ export default function BackendStatus() {
   return (
     <div className="fixed bottom-4 left-4 z-40 bg-white rounded-lg shadow-lg border-2 border-gray-200 p-3 max-w-xs">
       <div className="text-xs font-bold text-gray-700 mb-2">Stato Sistema</div>
-      
-      {/* Backend Status */}
+
       <div className="flex items-center gap-2 mb-1.5">
         {backendStatus === 'loading' && (
           <>
@@ -52,7 +60,6 @@ export default function BackendStatus() {
         )}
       </div>
 
-      {/* Database Status */}
       {backendStatus === 'online' && (
         <div className="flex items-center gap-2 mb-1.5">
           <Database className="w-4 h-4 text-green-600" />
@@ -60,7 +67,6 @@ export default function BackendStatus() {
         </div>
       )}
 
-      {/* Stripe Status */}
       {backendStatus === 'online' && stripeConfigured !== null && (
         <div className="flex items-center gap-2">
           {stripeConfigured ? (
@@ -77,12 +83,9 @@ export default function BackendStatus() {
         </div>
       )}
 
-      {/* Warning se Stripe non configurato */}
       {backendStatus === 'online' && stripeConfigured === false && (
         <div className="mt-2 pt-2 border-t border-gray-200">
-          <p className="text-xs text-orange-700 font-semibold mb-1">
-            ⚠️ Configura chiavi Stripe
-          </p>
+          <p className="text-xs text-orange-700 font-semibold mb-1">⚠️ Configura chiavi Stripe</p>
           <p className="text-xs text-gray-600 leading-tight">
             Leggi: <code className="bg-gray-100 px-1">COME_OTTENERE_SECRET_KEY.md</code>
           </p>
