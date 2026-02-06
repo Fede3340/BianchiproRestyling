@@ -93,7 +93,7 @@ export default function ProductDetails({
       </div>
 
       {/* Price Section */}
-      <div className="bg-green-50/60 rounded-xl p-4 border-2 border-green-200/70">
+      <div className="p-4">
         <div className="flex items-center space-x-2 mb-1">
           <span className="text-gray-500 line-through text-lg font-semibold">€ 5.133,15</span>
           <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold bg-orange-400 text-white">

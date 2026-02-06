@@ -13,9 +13,7 @@ export default function BackendStatus() {
         if (response.ok) {
           setBackendStatus('online');
           
-          // Verifica se Stripe è configurato controllando il file CheckoutModal
-          // Nota: questo è solo un indicatore visivo, la vera verifica avviene nel modal
-          setStripeConfigured(false); // Cambia a true dopo aver configurato la chiave
+          setStripeConfigured(isStripeConfigured());
         } else {
           setBackendStatus('offline');
         }
