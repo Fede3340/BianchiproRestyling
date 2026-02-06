@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Header from './components/Header';
 import ProductGallery from './components/ProductGallery';
 import ProductDetails from './components/ProductDetails';
@@ -234,6 +234,7 @@ export default function App() {
 
 
   return (
+    <AppErrorBoundary>
     <div className="min-h-screen bg-gray-50 overflow-x-hidden">
       <Header 
         cartItemCount={totalCartItems} 
@@ -329,5 +330,6 @@ export default function App() {
         <BackendStatus />
       </AppErrorBoundary>
     </div>
+    </AppErrorBoundary>
   );
 }
