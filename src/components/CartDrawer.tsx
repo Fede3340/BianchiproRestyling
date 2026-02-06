@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ShoppingCart, X, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
+import { ShoppingCart, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 import { ImageWithFallback } from './figma/ImageWithFallback';
 import CheckoutModal from './CheckoutModal';
 import { toast } from 'sonner@2.0.3';
@@ -51,17 +51,18 @@ export default function CartDrawer({ items, onRemoveItem, onUpdateQuantity, onCl
     [items],
   );
 
+  const isEmpty = normalizedItems.length === 0;
   const totalItems = normalizedItems.reduce((sum, item) => sum + item.quantity, 0);
   const totalPrice = normalizedItems.reduce((sum, item) => sum + (item.price + getAccessoriesTotal(item)) * item.quantity, 0);
 
-  const localSubtotal = totalPrice;
-  const localVat = totalPrice * 0.22;
-  const localTotal = totalPrice * 1.22;
-
   useEffect(() => {
+    const localSubtotal = totalPrice;
+    const localVat = totalPrice * 0.22;
+    const localTotal = totalPrice * 1.22;
+
     setQuote({ subtotal: localSubtotal, vat: localVat, total: localTotal });
 
-    if (normalizedItems.length === 0) {
+    if (isEmpty) {
       return;
     }
 
@@ -81,7 +82,6 @@ export default function CartDrawer({ items, onRemoveItem, onUpdateQuantity, onCl
         }
 
         const data = await response.json();
-
         setQuote({
           subtotal: toNumber(data?.subtotal),
           vat: toNumber(data?.vat),
@@ -93,9 +93,8 @@ export default function CartDrawer({ items, onRemoveItem, onUpdateQuantity, onCl
     };
 
     fetchQuote();
-
     return () => controller.abort();
-  }, [normalizedItems, localSubtotal, localVat, localTotal]);
+  }, [normalizedItems, isEmpty, totalPrice]);
 
   const handleCheckoutSuccess = (orderId: string) => {
     toast.success('🎉 Pagamento completato!', {
@@ -105,8 +104,6 @@ export default function CartDrawer({ items, onRemoveItem, onUpdateQuantity, onCl
     onClearCart();
     setCheckoutOpen(false);
   };
-
-  const isEmpty = normalizedItems.length === 0;
 
   return (
     <>
@@ -198,112 +195,112 @@ export default function CartDrawer({ items, onRemoveItem, onUpdateQuantity, onCl
               </button>
             </div>
           ) : (
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              {normalizedItems.map((item) => {
-                const accessoriesPrice = getAccessoriesTotal(item);
-                const itemTotal = (item.price + accessoriesPrice) * item.quantity;
+            <>
+              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                {normalizedItems.map((item) => {
+                  const accessoriesPrice = getAccessoriesTotal(item);
+                  const itemTotal = (item.price + accessoriesPrice) * item.quantity;
 
-                return (
-                  <div key={item.id} className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-                  <div className="flex gap-3">
-                    <div className="w-20 h-20 bg-white rounded border border-gray-200 flex-shrink-0 overflow-hidden">
-                      <ImageWithFallback src={item.image} alt={item.name} className="w-full h-full object-contain" />
-                    </div>
+                  return (
+                    <div key={item.id} className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                      <div className="flex gap-3">
+                        <div className="w-20 h-20 bg-white rounded border border-gray-200 flex-shrink-0 overflow-hidden">
+                          <ImageWithFallback src={item.image} alt={item.name} className="w-full h-full object-contain" />
+                        </div>
 
-                    <div className="flex-1 min-w-0">
-                      <div className="flex justify-between items-start gap-2">
-                        <h3 className="text-sm font-bold text-gray-900 leading-tight">{item.name}</h3>
-                        <button
-                          type="button"
-                          onClick={() => onRemoveItem(item.id)}
-                          className="p-1 hover:bg-red-50 rounded transition-colors flex-shrink-0"
-                        >
-                          <Trash2 className="w-4 h-4 text-red-500" />
-                        </button>
-                      </div>
-
-                      {item.options && item.options.length > 0 && <div className="mt-1 text-xs text-gray-600 font-medium">{item.options.join(' • ')}</div>}
-
-                      {item.accessories && item.accessories.length > 0 && (
-                        <div className="mt-1.5 space-y-0.5">
-                          <div className="text-xs text-green-700 font-bold">
-                            + {item.accessories.length} {item.accessories.length === 1 ? 'accessorio' : 'accessori'}:
+                        <div className="flex-1 min-w-0">
+                          <div className="flex justify-between items-start gap-2">
+                            <h3 className="text-sm font-bold text-gray-900 leading-tight">{item.name}</h3>
+                            <button
+                              type="button"
+                              onClick={() => onRemoveItem(item.id)}
+                              className="p-1 hover:bg-red-50 rounded transition-colors flex-shrink-0"
+                            >
+                              <Trash2 className="w-4 h-4 text-red-500" />
+                            </button>
                           </div>
-                          {item.accessories.map((acc, idx) => (
-                            <div key={idx} className="text-xs text-gray-600 font-medium pl-2">
-                              • {acc.name} (+€ {formatPrice(acc.price)})
+
+                          {item.options && item.options.length > 0 && <div className="mt-1 text-xs text-gray-600 font-medium">{item.options.join(' • ')}</div>}
+
+                          {item.accessories && item.accessories.length > 0 && (
+                            <div className="mt-1.5 space-y-0.5">
+                              <div className="text-xs text-green-700 font-bold">
+                                + {item.accessories.length} {item.accessories.length === 1 ? 'accessorio' : 'accessori'}:
+                              </div>
+                              {item.accessories.map((acc, idx) => (
+                                <div key={idx} className="text-xs text-gray-600 font-medium pl-2">
+                                  • {acc.name} (+€ {formatPrice(acc.price)})
+                                </div>
+                              ))}
+                              <div className="text-xs text-green-700 font-extrabold pl-2">Totale accessori: € {formatPrice(accessoriesPrice)}</div>
                             </div>
-                          ))}
-                          <div className="text-xs text-green-700 font-extrabold pl-2">Totale accessori: € {formatPrice(accessoriesPrice)}</div>
-                        </div>
-                      )}
+                          )}
 
-                      <div className="mt-2 flex items-center justify-between">
-                        <div className="flex items-center border border-gray-300 rounded">
-                          <button
-                            type="button"
-                            onClick={() => onUpdateQuantity(item.id, Math.max(1, item.quantity - 1))}
-                            className="w-8 h-8 bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold text-lg"
-                          >
-                            −
-                          </button>
-                          <span className="w-10 h-8 flex items-center justify-center text-sm font-bold bg-white">{item.quantity}</span>
-                          <button
-                            type="button"
-                            onClick={() => onUpdateQuantity(item.id, item.quantity + 1)}
-                            className="w-8 h-8 bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold text-lg"
-                          >
-                            +
-                          </button>
-                        </div>
+                          <div className="mt-2 flex items-center justify-between">
+                            <div className="flex items-center border border-gray-300 rounded">
+                              <button
+                                type="button"
+                                onClick={() => onUpdateQuantity(item.id, Math.max(1, item.quantity - 1))}
+                                className="w-8 h-8 bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold text-lg"
+                              >
+                                −
+                              </button>
+                              <span className="w-10 h-8 flex items-center justify-center text-sm font-bold bg-white">{item.quantity}</span>
+                              <button
+                                type="button"
+                                onClick={() => onUpdateQuantity(item.id, item.quantity + 1)}
+                                className="w-8 h-8 bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold text-lg"
+                              >
+                                +
+                              </button>
+                            </div>
 
-                        <div className="text-right">
-                          <div className="text-base font-extrabold text-gray-900">€ {formatPrice(itemTotal)}</div>
+                            <div className="text-right">
+                              <div className="text-base font-extrabold text-gray-900">€ {formatPrice(itemTotal)}</div>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {!isEmpty && (
-            <div className="border-t-2 border-gray-200 bg-white p-4 space-y-3">
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm font-semibold text-gray-700">
-                  <span>Subtotale ({totalItems} {totalItems === 1 ? 'articolo' : 'articoli'})</span>
-                  <span>€ {formatPrice(quote.subtotal)}</span>
-                </div>
-                <div className="flex justify-between text-sm font-semibold text-gray-700">
-                  <span>IVA (22%)</span>
-                  <span>€ {formatPrice(quote.vat)}</span>
-                </div>
-                <div className="flex justify-between text-lg font-extrabold text-gray-900 pt-2 border-t border-gray-200">
-                  <span>Totale</span>
-                  <span>€ {formatPrice(quote.total)}</span>
-                </div>
+                  );
+                })}
               </div>
 
-              <div className="space-y-2">
-                <button
-                  type="button"
-                  onClick={() => setCheckoutOpen(true)}
-                  className="w-full py-3 bg-green-500 hover:bg-green-600 text-white font-extrabold rounded-lg transition-colors"
-                >
-                  Procedi al pagamento
-                </button>
+              <div className="border-t-2 border-gray-200 bg-white p-4 space-y-3">
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm font-semibold text-gray-700">
+                    <span>Subtotale ({totalItems} {totalItems === 1 ? 'articolo' : 'articoli'})</span>
+                    <span>€ {formatPrice(quote.subtotal)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm font-semibold text-gray-700">
+                    <span>IVA (22%)</span>
+                    <span>€ {formatPrice(quote.vat)}</span>
+                  </div>
+                  <div className="flex justify-between text-lg font-extrabold text-gray-900 pt-2 border-t border-gray-200">
+                    <span>Totale</span>
+                    <span>€ {formatPrice(quote.total)}</span>
+                  </div>
+                </div>
 
-                <button
-                  type="button"
-                  onClick={onClearCart}
-                  className="w-full py-2 text-sm font-bold text-gray-600 hover:text-gray-800 transition-colors"
-                >
-                  Svuota carrello
-                </button>
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    onClick={() => setCheckoutOpen(true)}
+                    className="w-full py-3 bg-green-500 hover:bg-green-600 text-white font-extrabold rounded-lg transition-colors"
+                  >
+                    Procedi al pagamento
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={onClearCart}
+                    className="w-full py-2 text-sm font-bold text-gray-600 hover:text-gray-800 transition-colors"
+                  >
+                    Svuota carrello
+                  </button>
+                </div>
               </div>
-            </div>
+            </>
           )}
         </div>
       </div>

@@ -17,6 +17,7 @@
   - **Build command**: `npm run build`
   - **Publish directory**: `build`
   - **Functions directory**: `netlify/functions`
+  - **Node version**: `20` (via `.nvmrc` / `engines`)
   - **Environment variables**:
     - `VITE_STRIPE_PUBLISHABLE_KEY` (chiave pubblica Stripe, `pk_test_...`)
     - `STRIPE_SECRET_KEY` (chiave segreta Stripe, `sk_test_...`)
@@ -33,3 +34,12 @@
 
   L'endpoint di preventivo è disponibile su `/.netlify/functions/preventivo`, mentre il pagamento usa `/.netlify/functions/create-payment-intent` e `/.netlify/functions/orders`.
   
+
+
+  Build command + Publish directory (riassunto):
+  - `buildCommand`: `npm run build`
+  - `publishDir`: `build`
+
+  Variabili ambiente richieste (solo nomi):
+  - `VITE_STRIPE_PUBLISHABLE_KEY`
+  - `STRIPE_SECRET_KEY`
