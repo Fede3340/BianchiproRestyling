@@ -112,9 +112,9 @@ export default function App() {
 
     setCartItems(prev => [...prev, newItem]);
     setCurrentCartItemId(itemId);
-    
-    // NON apriamo più automaticamente il carrello
-    // setCartExpanded(true);
+
+    // Apri subito il carrello quando viene aggiunto un prodotto
+    setCartExpanded(true);
     
     // NON resettiamo più le selezioni - così rimangono attive per aggiornamenti in tempo reale
   };
@@ -137,9 +137,9 @@ export default function App() {
       description: 'Aggiunto al carrello',
       duration: 2000,
     });
-    
-    // NON apriamo più automaticamente il carrello
-    // setCartExpanded(true);
+
+    // Apri subito il carrello quando viene aggiunto un accessorio
+    setCartExpanded(true);
   };
 
   const handleRemoveItem = (id: string) => {
