@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { CheckCircle, XCircle, Loader2, Database, CreditCard } from 'lucide-react';
-import { projectId, publicAnonKey } from '../utils/supabase/info';
+import { isStripeConfigured } from '../config/stripe';
 
 export default function BackendStatus() {
   const [backendStatus, setBackendStatus] = useState<'loading' | 'online' | 'offline'>('loading');
@@ -9,21 +9,12 @@ export default function BackendStatus() {
   useEffect(() => {
     const checkBackend = async () => {
       try {
-        const response = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/make-server-d9742687/health`,
-          {
-            headers: {
-              'Authorization': `Bearer ${publicAnonKey}`,
-            },
-          }
-        );
+        const response = await fetch('/.netlify/functions/preventivo');
 
         if (response.ok) {
           setBackendStatus('online');
           
-          // Verifica se Stripe è configurato controllando il file CheckoutModal
-          // Nota: questo è solo un indicatore visivo, la vera verifica avviene nel modal
-          setStripeConfigured(false); // Cambia a true dopo aver configurato la chiave
+          setStripeConfigured(isStripeConfigured());
         } else {
           setBackendStatus('offline');
         }
