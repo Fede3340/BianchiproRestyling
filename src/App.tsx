@@ -83,14 +83,15 @@ export default function App() {
 
   const handleAddToCart = () => {
     const basePrice = 4106.52;
-    
+
     // Calculate probe price
     const probePrice = probe === 'doppia' ? 120 : probe === 'wireless' ? 180 : 0;
-    
+
     // Get ALL selected accessories details
     const selectedAccessoriesData = accessories
       .filter(acc => selectedAccessories.includes(acc.id))
-      .map(acc => ({ name: acc.name, price: acc.price }));
+      .map(acc => ({ name: acc.name, price: acc.price }))
+      .sort((a, b) => a.name.localeCompare(b.name));
 
     // Create options array
     const options = [
@@ -98,16 +99,41 @@ export default function App() {
       `Sonda: ${probe.charAt(0).toUpperCase() + probe.slice(1)}`
     ];
 
+    const normalizedAccessories = selectedAccessoriesData.length > 0 ? selectedAccessoriesData : undefined;
+
+    const existingItemIndex = cartItems.findIndex((item) => {
+      const sameName = item.name === 'Abbattitore di Temperatura AB5514 Forcar';
+      const samePrice = item.price === basePrice + probePrice;
+      const sameOptions = JSON.stringify(item.options || []) === JSON.stringify(options);
+      const itemAccessories = [...(item.accessories || [])].sort((a, b) => a.name.localeCompare(b.name));
+      const sameAccessories = JSON.stringify(itemAccessories) === JSON.stringify(normalizedAccessories || []);
+
+      return sameName && samePrice && sameOptions && sameAccessories;
+    });
+
+    if (existingItemIndex >= 0) {
+      const existingItemId = cartItems[existingItemIndex].id;
+      setCartItems(prev =>
+        prev.map(item =>
+          item.id === existingItemId
+            ? { ...item, quantity: item.quantity + quantity }
+            : item
+        )
+      );
+      setCurrentCartItemId(existingItemId);
+      return;
+    }
+
     const itemId = `product-${Date.now()}`;
-    
+
     const newItem: CartItem = {
       id: itemId,
       name: 'Abbattitore di Temperatura AB5514 Forcar',
       price: basePrice + probePrice,
       quantity: quantity,
       image: mainImage,
-      options: options,
-      accessories: selectedAccessoriesData.length > 0 ? selectedAccessoriesData : undefined
+      options,
+      accessories: normalizedAccessories
     };
 
     setCartItems(prev => [...prev, newItem]);
@@ -117,24 +143,37 @@ export default function App() {
   };
 
   const handleAddAccessoryToCart = (accessory: { id: number; name: string; price: number; img: string | null }) => {
-    const itemId = `accessory-${accessory.id}-${Date.now()}`;
-    
-    const newItem: CartItem = {
-      id: itemId,
-      name: accessory.name,
-      price: accessory.price,
-      quantity: 1,
-      image: accessory.img || mainImage,
-    };
+    const existingAccessory = cartItems.find(
+      (item) => item.name === accessory.name && item.price === accessory.price && !item.options && !item.accessories,
+    );
 
-    setCartItems(prev => [...prev, newItem]);
-    
+    if (existingAccessory) {
+      setCartItems(prev =>
+        prev.map(item =>
+          item.id === existingAccessory.id
+            ? { ...item, quantity: item.quantity + 1 }
+            : item,
+        ),
+      );
+    } else {
+      const itemId = `accessory-${accessory.id}-${Date.now()}`;
+
+      const newItem: CartItem = {
+        id: itemId,
+        name: accessory.name,
+        price: accessory.price,
+        quantity: 1,
+        image: accessory.img || mainImage,
+      };
+
+      setCartItems(prev => [...prev, newItem]);
+    }
+
     // Feedback toast per confermare l'aggiunta
     toast.success(`✓ ${accessory.name}`, {
       description: 'Aggiunto al carrello',
       duration: 2000,
     });
-
   };
 
   const handleRemoveItem = (id: string) => {
