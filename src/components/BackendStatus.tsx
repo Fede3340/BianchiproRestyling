@@ -1,8 +1,5 @@
 import { useState, useEffect } from 'react';
 import { CheckCircle, XCircle, Loader2, Database, CreditCard } from 'lucide-react';
-import { isStripeConfigured } from '../config/stripe';
-
-const isNetlifyDev = Boolean((import.meta as any).env?.DEV) && typeof window !== 'undefined' && window.location.port === '8888';
 
 export default function BackendStatus() {
   const [backendStatus, setBackendStatus] = useState<'loading' | 'online' | 'offline'>('loading');
@@ -11,11 +8,7 @@ export default function BackendStatus() {
   useEffect(() => {
     const checkBackend = async () => {
       try {
-        if (isNetlifyDev) {
-          setBackendStatus('online');
-          setStripeConfigured(isStripeConfigured());
-          return;
-        }
+        const response = await fetch('/.netlify/functions/preventivo');
 
         const healthGet = await fetch('/.netlify/functions/preventivo', { method: 'GET' });
         const health = healthGet.ok
@@ -28,6 +21,7 @@ export default function BackendStatus() {
 
         if (health.ok) {
           setBackendStatus('online');
+          
           setStripeConfigured(isStripeConfigured());
         } else {
           setBackendStatus('offline');
