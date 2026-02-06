@@ -199,6 +199,7 @@ export default function App() {
   const totalCartItems = cartItems.reduce((sum, item) => sum + item.quantity, 0);
 
   return (
+    <AppErrorBoundary>
     <div className="min-h-screen bg-gray-50 overflow-x-hidden">
       <Header 
         cartItemCount={totalCartItems} 
@@ -294,5 +295,6 @@ export default function App() {
         <BackendStatus />
       </AppErrorBoundary>
     </div>
+    </AppErrorBoundary>
   );
 }
