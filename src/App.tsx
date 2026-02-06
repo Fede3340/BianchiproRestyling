@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Header from './components/Header';
 import ProductGallery from './components/ProductGallery';
 import ProductDetails from './components/ProductDetails';
@@ -197,6 +197,16 @@ export default function App() {
   };
 
   const totalCartItems = cartItems.reduce((sum, item) => sum + item.quantity, 0);
+
+  const previousCartCount = useRef(0);
+
+  useEffect(() => {
+    if (cartItems.length > previousCartCount.current) {
+      setCartExpanded(true);
+    }
+
+    previousCartCount.current = cartItems.length;
+  }, [cartItems.length]);
 
   return (
     <AppErrorBoundary>

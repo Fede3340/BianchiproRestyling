@@ -116,6 +116,24 @@ export default function CartDrawer({ items, onRemoveItem, onUpdateQuantity, onCl
               <X className="w-6 h-6 text-gray-700" />
             </button>
           </div>
+        </div>
+
+        <div className={`fixed inset-0 z-50 transition-all duration-300 ${isExpanded ? 'pointer-events-auto' : 'pointer-events-none'}`}>
+          <div
+            className={`absolute inset-0 bg-black transition-opacity duration-300 ${isExpanded ? 'opacity-50' : 'opacity-0'}`}
+            onClick={() => setIsExpanded(false)}
+          />
+
+          <div
+            className={`absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-2xl transition-transform duration-300 max-h-[80vh] flex flex-col ${
+              isExpanded ? 'translate-y-0' : 'translate-y-full'
+            }`}
+          >
+            <div className="flex items-center justify-between p-4 border-b-2 border-gray-200 bg-gray-50 rounded-t-2xl">
+              <div className="flex items-center space-x-3">
+                <ShoppingCart className="w-6 h-6 text-gray-700" />
+                <h2 className="text-lg font-extrabold text-gray-900">Il Tuo Carrello</h2>
+              </div>
 
           <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
             <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
@@ -132,7 +150,7 @@ export default function CartDrawer({ items, onRemoveItem, onUpdateQuantity, onCl
             </button>
           </div>
         </div>
-      </div>
+      </>
     );
   }
 
