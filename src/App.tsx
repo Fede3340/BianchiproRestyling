@@ -113,9 +113,6 @@ export default function App() {
     setCartItems(prev => [...prev, newItem]);
     setCurrentCartItemId(itemId);
 
-    // Apri subito il carrello quando viene aggiunto un prodotto
-    setCartExpanded(true);
-    
     // NON resettiamo più le selezioni - così rimangono attive per aggiornamenti in tempo reale
   };
 
@@ -138,8 +135,6 @@ export default function App() {
       duration: 2000,
     });
 
-    // Apri subito il carrello quando viene aggiunto un accessorio
-    setCartExpanded(true);
   };
 
   const handleRemoveItem = (id: string) => {
@@ -198,15 +193,6 @@ export default function App() {
 
   const totalCartItems = cartItems.reduce((sum, item) => sum + item.quantity, 0);
 
-  const previousCartCount = useRef(0);
-
-  useEffect(() => {
-    if (cartItems.length > previousCartCount.current) {
-      setCartExpanded(true);
-    }
-
-    previousCartCount.current = cartItems.length;
-  }, [cartItems.length]);
 
   return (
     <AppErrorBoundary>
