@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Header from './components/Header';
 import ProductGallery from './components/ProductGallery';
 import ProductDetails from './components/ProductDetails';
@@ -14,6 +14,7 @@ import mainImage from "figma:asset/f4ed0b934aabb9cdf06af64854509a5ac97f8256.png"
 import { toast } from 'sonner@2.0.3';
 import { Toaster } from './components/ui/sonner';
 import BackendStatus from './components/BackendStatus';
+import AppErrorBoundary from './components/AppErrorBoundary';
 
 interface CartItem {
   id: string;
@@ -111,9 +112,9 @@ export default function App() {
 
     setCartItems(prev => [...prev, newItem]);
     setCurrentCartItemId(itemId);
-    
-    // NON apriamo più automaticamente il carrello
-    // setCartExpanded(true);
+
+    // Apri subito il carrello quando viene aggiunto un prodotto
+    setCartExpanded(true);
     
     // NON resettiamo più le selezioni - così rimangono attive per aggiornamenti in tempo reale
   };
@@ -136,9 +137,9 @@ export default function App() {
       description: 'Aggiunto al carrello',
       duration: 2000,
     });
-    
-    // NON apriamo più automaticamente il carrello
-    // setCartExpanded(true);
+
+    // Apri subito il carrello quando viene aggiunto un accessorio
+    setCartExpanded(true);
   };
 
   const handleRemoveItem = (id: string) => {
@@ -196,6 +197,16 @@ export default function App() {
   };
 
   const totalCartItems = cartItems.reduce((sum, item) => sum + item.quantity, 0);
+
+  const previousCartCount = useRef(0);
+
+  useEffect(() => {
+    if (cartItems.length > previousCartCount.current) {
+      setCartExpanded(true);
+    }
+
+    previousCartCount.current = cartItems.length;
+  }, [cartItems.length]);
 
   return (
     <div className="min-h-screen bg-gray-50 overflow-x-hidden">
@@ -266,6 +277,7 @@ export default function App() {
       <Footer />
 
       {/* Cart Drawer */}
+      <AppErrorBoundary>
       <CartDrawer 
         items={cartItems}
         onRemoveItem={handleRemoveItem}
@@ -274,6 +286,7 @@ export default function App() {
         isExpanded={cartExpanded}
         setIsExpanded={setCartExpanded}
       />
+      </AppErrorBoundary>
 
       {/* Favorites Drawer */}
       <FavoritesDrawer 
@@ -287,7 +300,9 @@ export default function App() {
       <Toaster position="bottom-right" />
 
       {/* Backend Status Indicator */}
-      <BackendStatus />
+      <AppErrorBoundary>
+        <BackendStatus />
+      </AppErrorBoundary>
     </div>
   );
 }

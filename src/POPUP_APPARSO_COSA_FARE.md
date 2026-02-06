@@ -20,7 +20,7 @@
 **Seleziona e copia TUTTA questa riga** (triplo-click):
 
 ```
-sk_test_51SxCQJFSDg1ZifVqzDt7UI2dDAN1CLNsYla4eDLwAQmmYElWW1ZQPQnFNizxHCdJMn28csSksFe5IAaqWh2gAClT006bB3gNsE
+sk_test_<INCOLLA_LA_TUA_CHIAVE_COMPLETA_QUI>
 ```
 
 **CTRL+C** (Windows) o **CMD+C** (Mac)
@@ -45,7 +45,7 @@ Clicca dentro il rettangolo bianco nel popup.
 
 ### ✅ Deve essere ESATTAMENTE così:
 ```
-sk_test_51SxCQJFSDg1ZifVqzDt7UI2dDAN1CLNsYla4eDLwAQmmYElWW1ZQPQnFNizxHCdJMn28csSksFe5IAaqWh2gAClT006bB3gNsE
+sk_test_<INCOLLA_LA_TUA_CHIAVE_COMPLETA_QUI>
 ```
 
 ### ⚠️ CONTROLLA:
@@ -93,19 +93,19 @@ Vedrai: **"❌ Errore Stripe..."**
 ### Errore 1: Hai incollato la chiave sbagliata
 ```
 ❌ 44134226613  ← Questo è SBAGLIATO!
-✅ sk_test_51SxCQJFSDg1ZifVqzDt7UI2dDAN1CLNsYla4eDLwAQmmYElWW1ZQPQnFNizxHCdJMn28csSksFe5IAaqWh2gAClT006bB3gNsE
+✅ sk_test_<INCOLLA_LA_TUA_CHIAVE_COMPLETA_QUI>
 ```
 
 ### Errore 2: Hai copiato solo una parte
 ```
 ❌ sk_test_51SxCQJ  ← Troppo corto!
-✅ sk_test_51SxCQJFSDg1ZifVqzDt7UI2dDAN1CLNsYla4eDLwAQmmYElWW1ZQPQnFNizxHCdJMn28csSksFe5IAaqWh2gAClT006bB3gNsE
+✅ sk_test_<INCOLLA_LA_TUA_CHIAVE_COMPLETA_QUI>
 ```
 
 ### Errore 3: Hai aggiunto spazi
 ```
 ❌ sk_test_51SxCQJ...  ← Con spazio finale!
-✅ sk_test_51SxCQJFSDg1ZifVqzDt7UI2dDAN1CLNsYla4eDLwAQmmYElWW1ZQPQnFNizxHCdJMn28csSksFe5IAaqWh2gAClT006bB3gNsE
+✅ sk_test_<INCOLLA_LA_TUA_CHIAVE_COMPLETA_QUI>
 ```
 
 ### Errore 4: Hai cliccato "Annulla"
@@ -117,7 +117,7 @@ Vedrai: **"❌ Errore Stripe..."**
 ## 🎯 RICAPITOLANDO:
 
 1. ✅ Vedi il popup
-2. ✅ Copia: `sk_test_51SxCQJFSDg1ZifVqzDt7UI2dDAN1CLNsYla4eDLwAQmmYElWW1ZQPQnFNizxHCdJMn28csSksFe5IAaqWh2gAClT006bB3gNsE`
+2. ✅ Copia: `sk_test_<INCOLLA_LA_TUA_CHIAVE_COMPLETA_QUI>`
 3. ✅ Clicca nel campo del popup
 4. ✅ Incolla (CTRL+V)
 5. ✅ Verifica che inizi con `sk_test_51`
@@ -160,7 +160,7 @@ Prossimo passo: Configurare la Publishable Key
 # 📋 CHIAVE DA INCOLLARE:
 
 ```
-sk_test_51SxCQJFSDg1ZifVqzDt7UI2dDAN1CLNsYla4eDLwAQmmYElWW1ZQPQnFNizxHCdJMn28csSksFe5IAaqWh2gAClT006bB3gNsE
+sk_test_<INCOLLA_LA_TUA_CHIAVE_COMPLETA_QUI>
 ```
 
 **Copia questa ↑ e incolla nel popup!** 🚀
