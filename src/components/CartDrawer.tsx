@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ShoppingCart, X, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 import { ImageWithFallback } from './figma/ImageWithFallback';
 import CheckoutModal from './CheckoutModal';
@@ -36,24 +36,13 @@ const getAccessoriesTotal = (item: CartItem) =>
 export default function CartDrawer({ items, onRemoveItem, onUpdateQuantity, onClearCart, isExpanded, setIsExpanded }: CartDrawerProps) {
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [quote, setQuote] = useState({ subtotal: 0, vat: 0, total: 0 });
-
-  const normalizedItems = useMemo(
-    () =>
-      items.map((item) => ({
-        ...item,
-        quantity: Math.max(1, toNumber(item.quantity)),
-        price: toNumber(item.price),
-        accessories: (item.accessories || []).map((a) => ({
-          ...a,
-          price: toNumber(a.price),
-        })),
-      })),
-    [items],
-  );
-
-  const totalItems = normalizedItems.reduce((sum, item) => sum + item.quantity, 0);
-  const totalPrice = normalizedItems.reduce((sum, item) => sum + (item.price + getAccessoriesTotal(item)) * item.quantity, 0);
-
+  
+  const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
+  const totalPrice = items.reduce((sum, item) => {
+    const accessoriesPrice = item.accessories?.reduce((acc, a) => acc + a.price, 0) || 0;
+    return sum + (item.price + accessoriesPrice) * item.quantity;
+  }, 0);
+  
   const localSubtotal = totalPrice;
   const localVat = totalPrice * 0.22;
   const localTotal = totalPrice * 1.22;
@@ -61,7 +50,7 @@ export default function CartDrawer({ items, onRemoveItem, onUpdateQuantity, onCl
   useEffect(() => {
     setQuote({ subtotal: localSubtotal, vat: localVat, total: localTotal });
 
-    if (normalizedItems.length === 0) {
+    if (items.length === 0) {
       return;
     }
 
@@ -72,7 +61,7 @@ export default function CartDrawer({ items, onRemoveItem, onUpdateQuantity, onCl
         const response = await fetch('/.netlify/functions/preventivo', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ items: normalizedItems }),
+          body: JSON.stringify({ items }),
           signal: controller.signal,
         });
 
@@ -82,11 +71,9 @@ export default function CartDrawer({ items, onRemoveItem, onUpdateQuantity, onCl
 
         const data = await response.json();
 
-        setQuote({
-          subtotal: toNumber(data?.subtotal),
-          vat: toNumber(data?.vat),
-          total: toNumber(data?.total),
-        });
+        if (typeof data?.subtotal === 'number' && typeof data?.vat === 'number' && typeof data?.total === 'number') {
+          setQuote({ subtotal: data.subtotal, vat: data.vat, total: data.total });
+        }
       } catch (error) {
         console.error('Errore preventivo:', error);
       }
@@ -95,8 +82,8 @@ export default function CartDrawer({ items, onRemoveItem, onUpdateQuantity, onCl
     fetchQuote();
 
     return () => controller.abort();
-  }, [normalizedItems, localSubtotal, localVat, localTotal]);
-
+  }, [items, localSubtotal, localVat, localTotal]);
+  
   const handleCheckoutSuccess = (orderId: string) => {
     toast.success('🎉 Pagamento completato!', {
       description: `Ordine ${orderId} confermato. Riceverai una email di conferma.`,
@@ -108,22 +95,25 @@ export default function CartDrawer({ items, onRemoveItem, onUpdateQuantity, onCl
 
   if (normalizedItems.length === 0) {
     return (
-      <>
-        <div className={`fixed bottom-0 left-0 right-0 z-40 transition-all duration-300 ${isExpanded ? 'translate-y-full' : 'translate-y-0'}`}>
-          <div className="bg-gray-100 text-gray-900 shadow-xl border-t-2 border-gray-300 p-2">
-            <button
-              type="button"
-              onClick={() => setIsExpanded(true)}
-              className="w-full px-3 py-2.5 flex items-center justify-between hover:bg-gray-200/70 rounded-lg transition-colors"
-            >
-              <div className="flex items-center space-x-3">
-                <ShoppingCart className="w-5 h-5 text-gray-700" />
-                <div className="text-left">
-                  <div className="text-sm font-bold text-gray-900">Carrello</div>
-                  <div className="text-xs font-semibold text-gray-700">Vuoto</div>
-                </div>
-              </div>
-              <ChevronUp className="w-5 h-5 text-gray-700" />
+      <div className={`fixed inset-0 z-50 transition-all duration-300 ${isExpanded ? 'pointer-events-auto' : 'pointer-events-none'}`}>
+        <div
+          className={`absolute inset-0 bg-black transition-opacity duration-300 ${isExpanded ? 'opacity-50' : 'opacity-0'}`}
+          onClick={() => setIsExpanded(false)}
+        />
+
+        <div
+          className={`absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-2xl transition-transform duration-300 max-h-[80vh] flex flex-col ${
+            isExpanded ? 'translate-y-0' : 'translate-y-full'
+          }`}
+        >
+          <div className="flex items-center justify-between p-4 border-b-2 border-gray-200 bg-gray-50 rounded-t-2xl">
+            <div className="flex items-center space-x-3">
+              <ShoppingCart className="w-6 h-6 text-gray-700" />
+              <h2 className="text-lg font-extrabold text-gray-900">Il Tuo Carrello</h2>
+            </div>
+
+            <button type="button" onClick={() => setIsExpanded(false)} className="p-2 hover:bg-gray-200 rounded-full transition-colors">
+              <X className="w-6 h-6 text-gray-700" />
             </button>
           </div>
         </div>
@@ -145,25 +135,19 @@ export default function CartDrawer({ items, onRemoveItem, onUpdateQuantity, onCl
                 <h2 className="text-lg font-extrabold text-gray-900">Il Tuo Carrello</h2>
               </div>
 
-              <button type="button" onClick={() => setIsExpanded(false)} className="p-2 hover:bg-gray-200 rounded-full transition-colors">
-                <X className="w-6 h-6 text-gray-700" />
-              </button>
+          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
+            <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+              <ShoppingCart className="w-12 h-12 text-gray-400" />
             </div>
-
-            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
-              <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
-                <ShoppingCart className="w-12 h-12 text-gray-400" />
-              </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-2">Il tuo carrello è vuoto</h3>
-              <p className="text-gray-600 mb-6">Aggiungi prodotti per iniziare i tuoi acquisti</p>
-              <button
-                type="button"
-                onClick={() => setIsExpanded(false)}
-                className="py-3 px-6 rounded-lg bg-green-500 text-white font-extrabold text-sm hover:bg-green-600 transition-colors"
-              >
-                Continua lo shopping
-              </button>
-            </div>
+            <h3 className="text-xl font-bold text-gray-900 mb-2">Il tuo carrello è vuoto</h3>
+            <p className="text-gray-600 mb-6">Aggiungi prodotti per iniziare i tuoi acquisti</p>
+            <button
+              type="button"
+              onClick={() => setIsExpanded(false)}
+              className="py-3 px-6 rounded-lg bg-green-500 text-white font-extrabold text-sm hover:bg-green-600 transition-colors"
+            >
+              Continua lo shopping
+            </button>
           </div>
         </div>
       </>
@@ -173,8 +157,8 @@ export default function CartDrawer({ items, onRemoveItem, onUpdateQuantity, onCl
   return (
     <>
       <div className={`fixed bottom-0 left-0 right-0 z-40 transition-all duration-300 ${isExpanded ? 'translate-y-full' : 'translate-y-0'}`}>
-        <div className="bg-gray-100 text-gray-900 shadow-xl border-t-2 border-gray-400 p-2 space-y-2">
-          <button type="button" onClick={() => setIsExpanded(true)} className="w-full px-2 py-2 flex items-center justify-between hover:bg-gray-200/70 rounded-lg transition-colors">
+        <div className="bg-gray-100 text-gray-900 shadow-xl border-t-2 border-gray-400">
+          <button type="button" onClick={() => setIsExpanded(true)} className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-200/70 transition-colors">
             <div className="flex items-center space-x-3">
               <div className="relative">
                 <ShoppingCart className="w-5 h-5 text-gray-700" />
@@ -190,7 +174,7 @@ export default function CartDrawer({ items, onRemoveItem, onUpdateQuantity, onCl
 
             <div className="flex items-center space-x-3">
               <div className="text-right">
-                <div className="text-lg font-extrabold text-gray-900">€ {formatPrice(quote.subtotal)}</div>
+                <div className="text-lg font-extrabold text-gray-900">€ {quote.subtotal.toFixed(2)}</div>
                 <div className="text-xs font-semibold text-gray-700">Totale</div>
               </div>
               <ChevronUp className="w-5 h-5 text-gray-700" />
@@ -308,15 +292,15 @@ export default function CartDrawer({ items, onRemoveItem, onUpdateQuantity, onCl
             <div className="space-y-2">
               <div className="flex justify-between text-sm font-semibold text-gray-700">
                 <span>Subtotale ({totalItems} {totalItems === 1 ? 'articolo' : 'articoli'})</span>
-                <span>€ {formatPrice(quote.subtotal)}</span>
+                <span>€ {quote.subtotal.toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-sm font-semibold text-gray-700">
                 <span>IVA (22%)</span>
-                <span>€ {formatPrice(quote.vat)}</span>
+                <span>€ {quote.vat.toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-lg font-extrabold text-gray-900 pt-2 border-t border-gray-200">
                 <span>Totale</span>
-                <span>€ {formatPrice(quote.total)}</span>
+                <span>€ {quote.total.toFixed(2)}</span>
               </div>
             </div>
 
@@ -344,8 +328,8 @@ export default function CartDrawer({ items, onRemoveItem, onUpdateQuantity, onCl
       <CheckoutModal
         isOpen={checkoutOpen}
         onClose={() => setCheckoutOpen(false)}
-        total={toNumber(quote.total)}
-        items={normalizedItems}
+        total={quote.total}
+        items={items}
         onSuccess={handleCheckoutSuccess}
       />
     </>
