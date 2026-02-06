@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { CheckCircle, XCircle, Loader2, Database, CreditCard } from 'lucide-react';
-import { isStripeConfigured } from '../config/stripe';
 
 export default function BackendStatus() {
   const [backendStatus, setBackendStatus] = useState<'loading' | 'online' | 'offline'>('loading');
