@@ -8,10 +8,24 @@
 // NOTA: La Secret Key va configurata nelle variabili d'ambiente di Supabase,
 // NON in questo file (per sicurezza)
 
+const fallbackPublishableKey = 'pk_test_INSERISCI_QUI_LA_TUA_PUBLISHABLE_KEY';
+const localStorageKey = 'stripePublishableKey';
+
+export function getStripePublishableKey(): string {
+  if (typeof window !== 'undefined') {
+    const storedKey = window.localStorage.getItem(localStorageKey);
+    if (storedKey) {
+      return storedKey;
+    }
+  }
+
+  return import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || fallbackPublishableKey;
+}
+
 export const STRIPE_CONFIG = {
   // Publishable Key (sicura da esporre nel frontend)
-  publishableKey: 'pk_test_INSERISCI_QUI_LA_TUA_PUBLISHABLE_KEY',
-  
+  publishableKey: getStripePublishableKey(),
+
   // Altre configurazioni
   currency: 'eur',
   country: 'IT',
@@ -19,5 +33,11 @@ export const STRIPE_CONFIG = {
 
 // Verifica che la chiave sia stata configurata
 export function isStripeConfigured(): boolean {
-  return STRIPE_CONFIG.publishableKey !== 'pk_test_INSERISCI_QUI_LA_TUA_PUBLISHABLE_KEY';
+  return getStripePublishableKey() !== fallbackPublishableKey;
+}
+
+export function persistStripePublishableKey(key: string) {
+  if (typeof window !== 'undefined') {
+    window.localStorage.setItem(localStorageKey, key);
+  }
 }
