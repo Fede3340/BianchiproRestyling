@@ -79,7 +79,7 @@ export default function ProductDetails({
       </div>
 
       {/* Descrizione prodotto - COMPATTA */}
-      <div className="bg-[#E3F0FC]/50 rounded-xl p-3.5 border border-[#B8D8F0]/60">
+      <div className="p-3.5">
         <div className={`text-sm font-medium text-gray-800 leading-snug ${!descriptionExpanded ? 'line-clamp-1' : ''}`}>
           L'abbattitore di temperatura AB5514 Forcar è una soluzione progettata per le esigenze delle grandi cucine professionali, capace di combinare prestazioni elevate, ampie capacità e affidabilità. Con una struttura solida in acciaio inox AISI 304, garantisce resistenza e igiene in ogni ambiente di lavoro, risultando ideale per ristoranti, mense e laboratori con elevati volumi di produzione.
         </div>
