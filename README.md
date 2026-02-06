@@ -1,45 +1,59 @@
+# Bianchipro Restyling
 
-  # Bianchipro Restyling
+Progetto frontend **React + Vite** con deploy su **Netlify** e funzioni serverless in `netlify/functions`.
 
-  This is a code bundle for Bianchipro Restyling. The original project is available at https://www.figma.com/design/brHz1ZOcch0lObtYaEuHEC/Bianchipro-Restyling.
+## Avvio locale
 
-  ## Running the code
+- `npm i`
+- `npm run dev`
 
-  Run `npm i` to install the dependencies.
+## Soluzione definitiva (gratis) senza Codespaces
 
-  Run `npm run dev` to start the development server.
+Se Codespaces si ferma, non perdi il flusso: usa questo setup permanente.
 
-  ## Pubblicare su Netlify
+1. **GitHub come sorgente unica**
+   - lavori da PC locale (o da editor cloud come `github.dev`),
+   - fai commit/push su branch.
 
-  Il progetto è basato su **React + Vite** e il `package.json` principale si trova in radice. `netlify.toml` è già configurato per la build e le funzioni Netlify.
+2. **Netlify collegato al repo**
+   - deploy automatico su `main` (produzione),
+   - deploy preview automatico su ogni PR (link pronto da aprire).
 
-  Se Netlify non legge `netlify.toml`, inserisci manualmente:
-  - **Build command**: `npm run build`
-  - **Publish directory**: `build`
-  - **Functions directory**: `netlify/functions`
-  - **Node version**: `20` (via `.nvmrc` / `engines`)
-  - **Environment variables**:
-    - `VITE_STRIPE_PUBLISHABLE_KEY` (chiave pubblica Stripe, `pk_test_...`)
-    - `STRIPE_SECRET_KEY` (chiave segreta Stripe, `sk_test_...`)
+3. **GitHub Actions (CI build)**
+   - ad ogni push/PR viene eseguito `npm ci && npm run build`,
+   - se qualcosa rompe build/form/pagine/funzioni, lo vedi subito prima del merge.
 
-  Dove inserirle: **Site settings → Environment variables → Add a variable**.
-  - Nel campo **Name** scrivi esattamente `VITE_STRIPE_PUBLISHABLE_KEY` e nel campo **Value** incolla la tua `pk_test_...`.
-  - Ripeti con **Name** `STRIPE_SECRET_KEY` e **Value** `sk_test_...`.
-  - Salva e poi fai **Deploys → Trigger deploy → Deploy site** per applicarle.
+4. **Stripe e funzioni serverless**
+   - chiavi segrete solo in variabili d'ambiente Netlify,
+   - endpoint attivi su `/.netlify/functions/*`.
 
-  Deploy automatico:
-  1. Collega il repository GitHub.
-  2. Seleziona il branch `main`.
-  3. Abilita i deploy automatici (Netlify lo fa di default). 
+Questo è il modo più vicino a “Figma Make ma per sempre”: push e vedi subito preview/deploy, senza dipendere da una sessione Codespace.
 
-  L'endpoint di preventivo è disponibile su `/.netlify/functions/preventivo`, mentre il pagamento usa `/.netlify/functions/create-payment-intent` e `/.netlify/functions/orders`.
-  
+## Pubblicare su Netlify
 
+Il progetto è già configurato in `netlify.toml`.
 
-  Build command + Publish directory (riassunto):
-  - `buildCommand`: `npm run build`
-  - `publishDir`: `build`
+Se Netlify non legge il file, inserisci manualmente:
 
-  Variabili ambiente richieste (solo nomi):
-  - `VITE_STRIPE_PUBLISHABLE_KEY`
-  - `STRIPE_SECRET_KEY`
+- **Build command**: `npm run build`
+- **Publish directory**: `build`
+- **Functions directory**: `netlify/functions`
+- **Node version**: `20`
+
+### Variabili ambiente richieste (solo nomi)
+
+- `VITE_STRIPE_PUBLISHABLE_KEY`
+- `STRIPE_SECRET_KEY`
+
+### Dove inserirle in Netlify
+
+1. **Site settings → Environment variables → Add a variable**
+2. Name: `VITE_STRIPE_PUBLISHABLE_KEY` → Value: la tua `pk_test_...`
+3. Name: `STRIPE_SECRET_KEY` → Value: la tua `sk_test_...`
+4. Deploy: **Deploys → Trigger deploy → Deploy site**
+
+## Endpoint backend (Netlify Functions)
+
+- `/.netlify/functions/preventivo`
+- `/.netlify/functions/create-payment-intent`
+- `/.netlify/functions/orders`
