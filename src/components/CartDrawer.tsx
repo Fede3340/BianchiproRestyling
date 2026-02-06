@@ -288,6 +288,23 @@ export default function CartDrawer({ items, onRemoveItem, onUpdateQuantity, onCl
                         </div>
                       </div>
                     </div>
+                  );
+                })}
+              </div>
+
+              <div className="border-t-2 border-gray-200 bg-white p-4 space-y-3">
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm font-semibold text-gray-700">
+                    <span>Subtotale ({totalItems} {totalItems === 1 ? 'articolo' : 'articoli'})</span>
+                    <span>€ {formatPrice(quote.subtotal)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm font-semibold text-gray-700">
+                    <span>IVA (22%)</span>
+                    <span>€ {formatPrice(quote.vat)}</span>
+                  </div>
+                  <div className="flex justify-between text-lg font-extrabold text-gray-900 pt-2 border-t border-gray-200">
+                    <span>Totale</span>
+                    <span>€ {formatPrice(quote.total)}</span>
                   </div>
                   </div>
                 );
