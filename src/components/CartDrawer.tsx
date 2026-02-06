@@ -162,6 +162,14 @@ export default function CartDrawer({ items, onRemoveItem, onUpdateQuantity, onCl
               <ChevronUp className="w-5 h-5 text-gray-700" />
             </div>
           </button>
+
+          <button
+            type="button"
+            onClick={() => setCheckoutOpen(true)}
+            className="w-full py-2.5 bg-green-500 hover:bg-green-600 text-white font-extrabold rounded-lg transition-colors"
+          >
+            Procedi al pagamento · € {formatPrice(quote.total)}
+          </button>
         </div>
       </div>
 
