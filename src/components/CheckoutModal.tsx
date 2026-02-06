@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { X, CreditCard, Lock, Loader2 } from 'lucide-react';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { STRIPE_CONFIG, isStripeConfigured } from '../config/stripe';
 
-// ⚠️ CONFIGURAZIONE STRIPE - SOSTITUISCI LA CHIAVE QUI SOTTO
+// ⚠️ CONFIGURAZIONE STRIPE
 // 1. Vai su: https://dashboard.stripe.com/test/apikeys
 // 2. Copia la "Publishable key" (inizia con pk_test_...)
 // 3. Incollala qui sotto al posto di 'INSERISCI_TUA_PUBLISHABLE_KEY_QUI'
@@ -230,9 +230,18 @@ function CheckoutForm({
 }
 
 export default function CheckoutModal({ isOpen, onClose, total, items, onSuccess }: CheckoutModalProps) {
+  const [publishableKey, setPublishableKey] = useState(getStripePublishableKey());
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [localKeyInput, setLocalKeyInput] = useState('');
+
+  const stripePromise = useMemo(() => {
+    if (!publishableKey || publishableKey === 'pk_test_INSERISCI_QUI_LA_TUA_PUBLISHABLE_KEY') {
+      return null;
+    }
+    return loadStripe(publishableKey);
+  }, [publishableKey]);
 
   // Crea Payment Intent quando si apre il modal
   const initializePayment = async () => {
@@ -316,6 +325,37 @@ export default function CheckoutModal({ isOpen, onClose, total, items, onSuccess
               <p className="text-sm text-orange-800 mb-4">
                 Per abilitare i pagamenti, configura <code className="bg-white px-2 py-0.5 rounded font-mono text-xs">VITE_STRIPE_PUBLISHABLE_KEY</code> nelle variabili d'ambiente (Netlify).
               </p>
+
+              <div className="bg-white rounded-lg p-4 mb-4 border border-orange-200">
+                <label className="block text-xs font-semibold text-gray-700 mb-2">
+                  Inserisci la tua Publishable key
+                </label>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    type="text"
+                    value={localKeyInput}
+                    onChange={(event) => setLocalKeyInput(event.target.value)}
+                    placeholder="pk_test_..."
+                    className="flex-1 px-3 py-2 text-sm border border-orange-200 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-200"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!localKeyInput.trim()) {
+                        return;
+                      }
+                      persistStripePublishableKey(localKeyInput.trim());
+                      setPublishableKey(localKeyInput.trim());
+                    }}
+                    className="px-4 py-2 text-sm font-bold text-white bg-orange-600 rounded-md hover:bg-orange-700 transition-colors"
+                  >
+                    Salva chiave
+                  </button>
+                </div>
+                <p className="text-xs text-gray-600 mt-2">
+                  La chiave viene salvata nel browser solo per questo dispositivo.
+                </p>
+              </div>
               
               <div className="bg-white rounded-lg p-4 mb-4 border border-orange-200">
                 <p className="text-xs font-semibold text-gray-900 mb-3">📋 Passaggi rapidi:</p>
