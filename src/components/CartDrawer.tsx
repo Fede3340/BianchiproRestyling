@@ -162,13 +162,17 @@ export default function CartDrawer({ items, onRemoveItem, onUpdateQuantity, onCl
             <div className="flex items-center space-x-3">
               <div className="relative">
                 <ShoppingCart className="w-5 h-5 text-gray-700" />
-                <span className="absolute -top-2 -right-2 bg-green-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center shadow-sm">
-                  {totalItems}
-                </span>
+                {!isEmpty && (
+                  <span className="absolute -top-2 -right-2 bg-green-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center shadow-sm">
+                    {totalItems}
+                  </span>
+                )}
               </div>
               <div className="text-left">
                 <div className="text-sm font-bold text-gray-900">Carrello</div>
-                <div className="text-xs font-semibold text-gray-700">{totalItems} {totalItems === 1 ? 'articolo' : 'articoli'}</div>
+                <div className="text-xs font-semibold text-gray-700">
+                  {isEmpty ? 'Vuoto' : `${totalItems} ${totalItems === 1 ? 'articolo' : 'articoli'}`}
+                </div>
               </div>
             </div>
 
@@ -206,9 +210,11 @@ export default function CartDrawer({ items, onRemoveItem, onUpdateQuantity, onCl
             <div className="flex items-center space-x-3">
               <div className="relative">
                 <ShoppingCart className="w-6 h-6 text-gray-700" />
-                <span className="absolute -top-2 -right-2 bg-green-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
-                  {totalItems}
-                </span>
+                {!isEmpty && (
+                  <span className="absolute -top-2 -right-2 bg-green-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                    {totalItems}
+                  </span>
+                )}
               </div>
               <h2 className="text-lg font-extrabold text-gray-900">Il Tuo Carrello</h2>
             </div>
@@ -283,10 +289,11 @@ export default function CartDrawer({ items, onRemoveItem, onUpdateQuantity, onCl
                       </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           <div className="border-t-2 border-gray-200 bg-white p-4 space-y-3">
             <div className="space-y-2">
@@ -302,7 +309,6 @@ export default function CartDrawer({ items, onRemoveItem, onUpdateQuantity, onCl
                 <span>Totale</span>
                 <span>€ {quote.total.toFixed(2)}</span>
               </div>
-            </div>
 
             <div className="space-y-2">
               <button
