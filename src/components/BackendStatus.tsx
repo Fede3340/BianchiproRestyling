@@ -1,5 +1,8 @@
 import { useState, useEffect } from 'react';
 import { CheckCircle, XCircle, Loader2, Database, CreditCard } from 'lucide-react';
+import { isStripeConfigured } from '../config/stripe';
+
+const isLocalDev = Boolean((import.meta as any).env?.DEV);
 
 export default function BackendStatus() {
   const [backendStatus, setBackendStatus] = useState<'loading' | 'online' | 'offline'>('loading');
@@ -8,7 +11,13 @@ export default function BackendStatus() {
   useEffect(() => {
     const checkBackend = async () => {
       try {
-        const response = await fetch('/.netlify/functions/preventivo');
+        if (isLocalDev) {
+          // In sviluppo locale (vite dev) le Netlify Functions potrebbero non essere instradate.
+          // Evitiamo un falso 'offline' e usiamo il calcolo locale nel carrello.
+          setBackendStatus('online');
+          setStripeConfigured(isStripeConfigured());
+          return;
+        }
 
         const healthGet = await fetch('/.netlify/functions/preventivo', { method: 'GET' });
         const health = healthGet.ok
@@ -21,7 +30,6 @@ export default function BackendStatus() {
 
         if (health.ok) {
           setBackendStatus('online');
-          
           setStripeConfigured(isStripeConfigured());
         } else {
           setBackendStatus('offline');

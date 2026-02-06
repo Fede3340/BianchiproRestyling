@@ -9,10 +9,22 @@
 // NON in questo file (per sicurezza)
 
 const fallbackPublishableKey = 'pk_test_INSERISCI_QUI_LA_TUA_PUBLISHABLE_KEY';
+const localStorageKey = 'stripePublishableKey';
+
+export function getStripePublishableKey(): string {
+  if (typeof window !== 'undefined') {
+    const storedKey = window.localStorage.getItem(localStorageKey);
+    if (storedKey) {
+      return storedKey;
+    }
+  }
+
+  return import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || fallbackPublishableKey;
+}
 
 export const STRIPE_CONFIG = {
   // Publishable Key (sicura da esporre nel frontend)
-  publishableKey: import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || fallbackPublishableKey,
+  publishableKey: getStripePublishableKey(),
 
   // Altre configurazioni
   currency: 'eur',
@@ -21,5 +33,11 @@ export const STRIPE_CONFIG = {
 
 // Verifica che la chiave sia stata configurata
 export function isStripeConfigured(): boolean {
-  return STRIPE_CONFIG.publishableKey !== fallbackPublishableKey;
+  return getStripePublishableKey() !== fallbackPublishableKey;
+}
+
+export function persistStripePublishableKey(key: string) {
+  if (typeof window !== 'undefined') {
+    window.localStorage.setItem(localStorageKey, key);
+  }
 }

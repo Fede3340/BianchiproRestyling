@@ -2,16 +2,12 @@ import { useMemo, useState } from 'react';
 import { X, CreditCard, Lock, Loader2 } from 'lucide-react';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
-import { STRIPE_CONFIG, isStripeConfigured } from '../config/stripe';
+import { STRIPE_CONFIG, getStripePublishableKey, persistStripePublishableKey } from '../config/stripe';
 
 // ⚠️ CONFIGURAZIONE STRIPE
 // 1. Vai su: https://dashboard.stripe.com/test/apikeys
 // 2. Copia la "Publishable key" (inizia con pk_test_...)
-// 3. Incollala qui sotto al posto di 'INSERISCI_TUA_PUBLISHABLE_KEY_QUI'
-
-const stripePromise = isStripeConfigured()
-  ? loadStripe(STRIPE_CONFIG.publishableKey)
-  : null;
+// 3. Impostala in VITE_STRIPE_PUBLISHABLE_KEY oppure inseriscila nel modal
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -323,7 +319,7 @@ export default function CheckoutModal({ isOpen, onClose, total, items, onSuccess
                 ⚠️ Publishable Key Non Configurata
               </h3>
               <p className="text-sm text-orange-800 mb-4">
-                Per abilitare i pagamenti, configura <code className="bg-white px-2 py-0.5 rounded font-mono text-xs">VITE_STRIPE_PUBLISHABLE_KEY</code> nelle variabili d'ambiente (Netlify).
+                Per abilitare i pagamenti, inserisci la <strong>Publishable key</strong> (pk_test...) o configuralo in <code className="bg-white px-2 py-0.5 rounded font-mono text-xs">VITE_STRIPE_PUBLISHABLE_KEY</code>.
               </p>
 
               <div className="bg-white rounded-lg p-4 mb-4 border border-orange-200">
@@ -370,7 +366,7 @@ export default function CheckoutModal({ isOpen, onClose, total, items, onSuccess
                   </li>
                   <li className="flex gap-2">
                     <span className="font-bold text-orange-600">3.</span>
-                    <span>Apri le variabili d'ambiente in Netlify</span>
+                    <span>Incolla la chiave sopra oppure apri le variabili d'ambiente in Netlify</span>
                   </li>
                   <li className="flex gap-2">
                     <span className="font-bold text-orange-600">4.</span>
