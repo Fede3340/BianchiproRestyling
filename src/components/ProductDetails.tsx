@@ -79,7 +79,7 @@ export default function ProductDetails({
       </div>
 
       {/* Descrizione prodotto - COMPATTA */}
-      <div className="bg-[#E3F0FC]/50 rounded-xl p-3.5 border border-[#B8D8F0]/60">
+      <div className="p-3.5">
         <div className={`text-sm font-medium text-gray-800 leading-snug ${!descriptionExpanded ? 'line-clamp-1' : ''}`}>
           L'abbattitore di temperatura AB5514 Forcar è una soluzione progettata per le esigenze delle grandi cucine professionali, capace di combinare prestazioni elevate, ampie capacità e affidabilità. Con una struttura solida in acciaio inox AISI 304, garantisce resistenza e igiene in ogni ambiente di lavoro, risultando ideale per ristoranti, mense e laboratori con elevati volumi di produzione.
         </div>
@@ -93,7 +93,7 @@ export default function ProductDetails({
       </div>
 
       {/* Price Section */}
-      <div className="bg-green-50/60 rounded-xl p-4 border-2 border-green-200/70">
+      <div className="p-4">
         <div className="flex items-center space-x-2 mb-1">
           <span className="text-gray-500 line-through text-lg font-semibold">€ 5.133,15</span>
           <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold bg-orange-400 text-white">
@@ -112,7 +112,7 @@ export default function ProductDetails({
       {/* Options - DROPDOWN per massima usabilità */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {/* Capacità Teglie */}
-        <div className="bg-gray-50/60 rounded-lg p-3 border border-gray-200/70">
+        <div className="rounded-lg p-3">
           <label className="text-sm font-bold text-gray-900 mb-1.5 block">Capacità Teglie</label>
           <select
             value={capacity}
@@ -126,7 +126,7 @@ export default function ProductDetails({
         </div>
 
         {/* Tipo Sonda */}
-        <div className="bg-gray-50/60 rounded-lg p-3 border border-gray-200/70">
+        <div className="rounded-lg p-3">
           <label className="text-sm font-bold text-gray-900 mb-1.5 block">Tipo Sonda</label>
           <select
             value={probe}

@@ -14,6 +14,7 @@ import mainImage from "figma:asset/f4ed0b934aabb9cdf06af64854509a5ac97f8256.png"
 import { toast } from 'sonner@2.0.3';
 import { Toaster } from './components/ui/sonner';
 import BackendStatus from './components/BackendStatus';
+import AppErrorBoundary from './components/AppErrorBoundary';
 
 interface CartItem {
   id: string;
@@ -111,10 +112,7 @@ export default function App() {
 
     setCartItems(prev => [...prev, newItem]);
     setCurrentCartItemId(itemId);
-    
-    // NON apriamo più automaticamente il carrello
-    // setCartExpanded(true);
-    
+
     // NON resettiamo più le selezioni - così rimangono attive per aggiornamenti in tempo reale
   };
 
@@ -136,9 +134,7 @@ export default function App() {
       description: 'Aggiunto al carrello',
       duration: 2000,
     });
-    
-    // NON apriamo più automaticamente il carrello
-    // setCartExpanded(true);
+
   };
 
   const handleRemoveItem = (id: string) => {
@@ -196,6 +192,7 @@ export default function App() {
   };
 
   const totalCartItems = cartItems.reduce((sum, item) => sum + item.quantity, 0);
+
 
   return (
     <div className="min-h-screen bg-gray-50 overflow-x-hidden">
@@ -266,6 +263,7 @@ export default function App() {
       <Footer />
 
       {/* Cart Drawer */}
+      <AppErrorBoundary>
       <CartDrawer 
         items={cartItems}
         onRemoveItem={handleRemoveItem}
@@ -274,6 +272,7 @@ export default function App() {
         isExpanded={cartExpanded}
         setIsExpanded={setCartExpanded}
       />
+      </AppErrorBoundary>
 
       {/* Favorites Drawer */}
       <FavoritesDrawer 
@@ -287,7 +286,9 @@ export default function App() {
       <Toaster position="bottom-right" />
 
       {/* Backend Status Indicator */}
-      <BackendStatus />
+      <AppErrorBoundary>
+        <BackendStatus />
+      </AppErrorBoundary>
     </div>
   );
 }
