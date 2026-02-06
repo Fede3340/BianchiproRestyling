@@ -268,6 +268,7 @@ export default function App() {
       <Footer />
 
       {/* Cart Drawer */}
+      <AppErrorBoundary>
       <CartDrawer 
         items={cartItems}
         onRemoveItem={handleRemoveItem}
@@ -276,6 +277,7 @@ export default function App() {
         isExpanded={cartExpanded}
         setIsExpanded={setCartExpanded}
       />
+      </AppErrorBoundary>
 
       {/* Favorites Drawer */}
       <FavoritesDrawer 
@@ -289,7 +291,9 @@ export default function App() {
       <Toaster position="bottom-right" />
 
       {/* Backend Status Indicator */}
-      <BackendStatus />
+      <AppErrorBoundary>
+        <BackendStatus />
+      </AppErrorBoundary>
     </div>
     </AppErrorBoundary>
   );
