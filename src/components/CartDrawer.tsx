@@ -23,6 +23,16 @@ interface CartDrawerProps {
   setIsExpanded: (expanded: boolean) => void;
 }
 
+const toNumber = (value: unknown) => {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : 0;
+};
+
+const formatPrice = (value: unknown) => toNumber(value).toFixed(2);
+
+const getAccessoriesTotal = (item: CartItem) =>
+  (item.accessories || []).reduce((acc, accessory) => acc + toNumber(accessory.price), 0);
+
 export default function CartDrawer({ items, onRemoveItem, onUpdateQuantity, onClearCart, isExpanded, setIsExpanded }: CartDrawerProps) {
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [quote, setQuote] = useState({ subtotal: 0, vat: 0, total: 0 });
@@ -83,44 +93,30 @@ export default function CartDrawer({ items, onRemoveItem, onUpdateQuantity, onCl
     setCheckoutOpen(false);
   };
 
-  // Se il carrello è vuoto, mostra solo l'expanded drawer quando richiesto
-  if (items.length === 0) {
+  if (normalizedItems.length === 0) {
     return (
-      <div 
-        className={`fixed inset-0 z-50 transition-all duration-300 ${
-          isExpanded ? 'pointer-events-auto' : 'pointer-events-none'
-        }`}
-      >
-        {/* Backdrop */}
-        <div 
-          className={`absolute inset-0 bg-black transition-opacity duration-300 ${
-            isExpanded ? 'opacity-50' : 'opacity-0'
-          }`}
+      <div className={`fixed inset-0 z-50 transition-all duration-300 ${isExpanded ? 'pointer-events-auto' : 'pointer-events-none'}`}>
+        <div
+          className={`absolute inset-0 bg-black transition-opacity duration-300 ${isExpanded ? 'opacity-50' : 'opacity-0'}`}
           onClick={() => setIsExpanded(false)}
         />
 
-        {/* Drawer content */}
-        <div 
+        <div
           className={`absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-2xl transition-transform duration-300 max-h-[80vh] flex flex-col ${
             isExpanded ? 'translate-y-0' : 'translate-y-full'
           }`}
         >
-          {/* Header */}
           <div className="flex items-center justify-between p-4 border-b-2 border-gray-200 bg-gray-50 rounded-t-2xl">
             <div className="flex items-center space-x-3">
               <ShoppingCart className="w-6 h-6 text-gray-700" />
               <h2 className="text-lg font-extrabold text-gray-900">Il Tuo Carrello</h2>
             </div>
-            
-            <button
-              onClick={() => setIsExpanded(false)}
-              className="p-2 hover:bg-gray-200 rounded-full transition-colors"
-            >
+
+            <button type="button" onClick={() => setIsExpanded(false)} className="p-2 hover:bg-gray-200 rounded-full transition-colors">
               <X className="w-6 h-6 text-gray-700" />
             </button>
           </div>
 
-          {/* Empty state */}
           <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
             <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
               <ShoppingCart className="w-12 h-12 text-gray-400" />
@@ -128,6 +124,7 @@ export default function CartDrawer({ items, onRemoveItem, onUpdateQuantity, onCl
             <h3 className="text-xl font-bold text-gray-900 mb-2">Il tuo carrello è vuoto</h3>
             <p className="text-gray-600 mb-6">Aggiungi prodotti per iniziare i tuoi acquisti</p>
             <button
+              type="button"
               onClick={() => setIsExpanded(false)}
               className="py-3 px-6 rounded-lg bg-green-500 text-white font-extrabold text-sm hover:bg-green-600 transition-colors"
             >
@@ -141,17 +138,9 @@ export default function CartDrawer({ items, onRemoveItem, onUpdateQuantity, onCl
 
   return (
     <>
-      {/* Mini bar - PIÙ VISIBILE CON GRIGIO CHIARO E BORDO SCURO */}
-      <div 
-        className={`fixed bottom-0 left-0 right-0 z-40 transition-all duration-300 ${
-          isExpanded ? 'translate-y-full' : 'translate-y-0'
-        }`}
-      >
+      <div className={`fixed bottom-0 left-0 right-0 z-40 transition-all duration-300 ${isExpanded ? 'translate-y-full' : 'translate-y-0'}`}>
         <div className="bg-gray-100 text-gray-900 shadow-xl border-t-2 border-gray-400">
-          <button
-            onClick={() => setIsExpanded(true)}
-            className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-200/70 transition-colors"
-          >
+          <button type="button" onClick={() => setIsExpanded(true)} className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-200/70 transition-colors">
             <div className="flex items-center space-x-3">
               <div className="relative">
                 <ShoppingCart className="w-5 h-5 text-gray-700" />
@@ -164,7 +153,7 @@ export default function CartDrawer({ items, onRemoveItem, onUpdateQuantity, onCl
                 <div className="text-xs font-semibold text-gray-700">{totalItems} {totalItems === 1 ? 'articolo' : 'articoli'}</div>
               </div>
             </div>
-            
+
             <div className="flex items-center space-x-3">
               <div className="text-right">
                 <div className="text-lg font-extrabold text-gray-900">€ {quote.subtotal.toFixed(2)}</div>
@@ -176,27 +165,17 @@ export default function CartDrawer({ items, onRemoveItem, onUpdateQuantity, onCl
         </div>
       </div>
 
-      {/* Expanded drawer */}
-      <div 
-        className={`fixed inset-0 z-50 transition-all duration-300 ${
-          isExpanded ? 'pointer-events-auto' : 'pointer-events-none'
-        }`}
-      >
-        {/* Backdrop */}
-        <div 
-          className={`absolute inset-0 bg-black transition-opacity duration-300 ${
-            isExpanded ? 'opacity-50' : 'opacity-0'
-          }`}
+      <div className={`fixed inset-0 z-50 transition-all duration-300 ${isExpanded ? 'pointer-events-auto' : 'pointer-events-none'}`}>
+        <div
+          className={`absolute inset-0 bg-black transition-opacity duration-300 ${isExpanded ? 'opacity-50' : 'opacity-0'}`}
           onClick={() => setIsExpanded(false)}
         />
 
-        {/* Drawer content */}
-        <div 
+        <div
           className={`absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-2xl transition-transform duration-300 max-h-[80vh] flex flex-col ${
             isExpanded ? 'translate-y-0' : 'translate-y-full'
           }`}
         >
-          {/* Header */}
           <div className="flex items-center justify-between p-4 border-b-2 border-gray-200 bg-gray-50 rounded-t-2xl">
             <div className="flex items-center space-x-3">
               <div className="relative">
@@ -207,38 +186,29 @@ export default function CartDrawer({ items, onRemoveItem, onUpdateQuantity, onCl
               </div>
               <h2 className="text-lg font-extrabold text-gray-900">Il Tuo Carrello</h2>
             </div>
-            
-            <button
-              onClick={() => setIsExpanded(false)}
-              className="p-2 hover:bg-gray-200 rounded-full transition-colors"
-            >
+
+            <button type="button" onClick={() => setIsExpanded(false)} className="p-2 hover:bg-gray-200 rounded-full transition-colors">
               <ChevronDown className="w-6 h-6 text-gray-700" />
             </button>
           </div>
 
-          {/* Cart items - Scrollable */}
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
-            {items.map((item) => {
-              const accessoriesPrice = item.accessories?.reduce((acc, a) => acc + a.price, 0) || 0;
+            {normalizedItems.map((item) => {
+              const accessoriesPrice = getAccessoriesTotal(item);
               const itemTotal = (item.price + accessoriesPrice) * item.quantity;
-              
+
               return (
                 <div key={item.id} className="bg-gray-50 rounded-lg p-3 border border-gray-200">
                   <div className="flex gap-3">
-                    {/* Image */}
                     <div className="w-20 h-20 bg-white rounded border border-gray-200 flex-shrink-0 overflow-hidden">
-                      <ImageWithFallback
-                        src={item.image}
-                        alt={item.name}
-                        className="w-full h-full object-contain"
-                      />
+                      <ImageWithFallback src={item.image} alt={item.name} className="w-full h-full object-contain" />
                     </div>
 
-                    {/* Details */}
                     <div className="flex-1 min-w-0">
                       <div className="flex justify-between items-start gap-2">
                         <h3 className="text-sm font-bold text-gray-900 leading-tight">{item.name}</h3>
                         <button
+                          type="button"
                           onClick={() => onRemoveItem(item.id)}
                           className="p-1 hover:bg-red-50 rounded transition-colors flex-shrink-0"
                         >
@@ -246,14 +216,8 @@ export default function CartDrawer({ items, onRemoveItem, onUpdateQuantity, onCl
                         </button>
                       </div>
 
-                      {/* Options */}
-                      {item.options && item.options.length > 0 && (
-                        <div className="mt-1 text-xs text-gray-600 font-medium">
-                          {item.options.join(' • ')}
-                        </div>
-                      )}
+                      {item.options && item.options.length > 0 && <div className="mt-1 text-xs text-gray-600 font-medium">{item.options.join(' • ')}</div>}
 
-                      {/* Accessories - ESPANSO CON DETTAGLI */}
                       {item.accessories && item.accessories.length > 0 && (
                         <div className="mt-1.5 space-y-0.5">
                           <div className="text-xs text-green-700 font-bold">
@@ -261,28 +225,25 @@ export default function CartDrawer({ items, onRemoveItem, onUpdateQuantity, onCl
                           </div>
                           {item.accessories.map((acc, idx) => (
                             <div key={idx} className="text-xs text-gray-600 font-medium pl-2">
-                              • {acc.name} (+€ {acc.price.toFixed(2)})
+                              • {acc.name} (+€ {formatPrice(acc.price)})
                             </div>
                           ))}
-                          <div className="text-xs text-green-700 font-extrabold pl-2">
-                            Totale accessori: € {accessoriesPrice.toFixed(2)}
-                          </div>
+                          <div className="text-xs text-green-700 font-extrabold pl-2">Totale accessori: € {formatPrice(accessoriesPrice)}</div>
                         </div>
                       )}
 
-                      {/* Price and quantity */}
                       <div className="mt-2 flex items-center justify-between">
                         <div className="flex items-center border border-gray-300 rounded">
                           <button
+                            type="button"
                             onClick={() => onUpdateQuantity(item.id, Math.max(1, item.quantity - 1))}
                             className="w-8 h-8 bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold text-lg"
                           >
                             −
                           </button>
-                          <span className="w-10 h-8 flex items-center justify-center text-sm font-bold bg-white">
-                            {item.quantity}
-                          </span>
+                          <span className="w-10 h-8 flex items-center justify-center text-sm font-bold bg-white">{item.quantity}</span>
                           <button
+                            type="button"
                             onClick={() => onUpdateQuantity(item.id, item.quantity + 1)}
                             className="w-8 h-8 bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold text-lg"
                           >
@@ -291,7 +252,7 @@ export default function CartDrawer({ items, onRemoveItem, onUpdateQuantity, onCl
                         </div>
 
                         <div className="text-right">
-                          <div className="text-base font-extrabold text-gray-900">€ {itemTotal.toFixed(2)}</div>
+                          <div className="text-base font-extrabold text-gray-900">€ {formatPrice(itemTotal)}</div>
                         </div>
                       </div>
                     </div>
@@ -301,9 +262,7 @@ export default function CartDrawer({ items, onRemoveItem, onUpdateQuantity, onCl
             })}
           </div>
 
-          {/* Footer - Total and actions */}
           <div className="border-t-2 border-gray-200 bg-white p-4 space-y-3">
-            {/* Summary */}
             <div className="space-y-2">
               <div className="flex justify-between text-sm font-semibold text-gray-700">
                 <span>Subtotale ({totalItems} {totalItems === 1 ? 'articolo' : 'articoli'})</span>
@@ -319,34 +278,28 @@ export default function CartDrawer({ items, onRemoveItem, onUpdateQuantity, onCl
               </div>
             </div>
 
-            {/* Actions */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
               <button
-                onClick={onClearCart}
-                className="py-3 px-4 rounded-lg border-2 border-gray-300 bg-white text-gray-700 font-bold text-sm hover:bg-gray-50 transition-colors"
-              >
-                Svuota
-              </button>
-              <button 
+                type="button"
                 onClick={() => setCheckoutOpen(true)}
-                className="py-3 px-4 rounded-lg bg-green-600 text-white font-extrabold text-sm hover:bg-green-700 transition-colors shadow-lg hover:shadow-xl"
+                className="w-full py-3 bg-green-500 hover:bg-green-600 text-white font-extrabold rounded-lg transition-colors"
               >
-                Procedi al Pagamento
+                Procedi al pagamento
+              </button>
+
+              <button
+                type="button"
+                onClick={onClearCart}
+                className="w-full py-2 text-sm font-bold text-gray-600 hover:text-gray-800 transition-colors"
+              >
+                Svuota carrello
               </button>
             </div>
-
-            <button
-              onClick={() => setIsExpanded(false)}
-              className="w-full py-2 text-sm font-bold text-gray-600 hover:text-gray-800"
-            >
-              Continua lo shopping
-            </button>
           </div>
         </div>
       </div>
 
-      {/* Checkout Modal */}
-      <CheckoutModal 
+      <CheckoutModal
         isOpen={checkoutOpen}
         onClose={() => setCheckoutOpen(false)}
         total={quote.total}
