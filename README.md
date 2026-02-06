@@ -8,4 +8,23 @@
   Run `npm i` to install the dependencies.
 
   Run `npm run dev` to start the development server.
+
+  ## Pubblicare su Netlify
+
+  Il progetto è basato su **React + Vite** e il `package.json` principale si trova in radice. `netlify.toml` è già configurato per la build e le funzioni Netlify.
+
+  Se Netlify non legge `netlify.toml`, inserisci manualmente:
+  - **Build command**: `npm run build`
+  - **Publish directory**: `build`
+  - **Functions directory**: `netlify/functions`
+  - **Environment variables**:
+    - `VITE_STRIPE_PUBLISHABLE_KEY` (chiave pubblica Stripe, `pk_test_...`)
+    - `STRIPE_SECRET_KEY` (chiave segreta Stripe, `sk_test_...`)
+
+  Deploy automatico:
+  1. Collega il repository GitHub.
+  2. Seleziona il branch `main`.
+  3. Abilita i deploy automatici (Netlify lo fa di default). 
+
+  L'endpoint di preventivo è disponibile su `/.netlify/functions/preventivo`, mentre il pagamento usa `/.netlify/functions/create-payment-intent` e `/.netlify/functions/orders`.
   

@@ -2,17 +2,15 @@ import { useState } from 'react';
 import { X, CreditCard, Lock, Loader2 } from 'lucide-react';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
-import { projectId, publicAnonKey } from '../utils/supabase/info';
+import { STRIPE_CONFIG, isStripeConfigured } from '../config/stripe';
 
 // ⚠️ CONFIGURAZIONE STRIPE - SOSTITUISCI LA CHIAVE QUI SOTTO
 // 1. Vai su: https://dashboard.stripe.com/test/apikeys
 // 2. Copia la "Publishable key" (inizia con pk_test_...)
 // 3. Incollala qui sotto al posto di 'INSERISCI_TUA_PUBLISHABLE_KEY_QUI'
 
-const STRIPE_PUBLISHABLE_KEY = 'INSERISCI_TUA_PUBLISHABLE_KEY_QUI';
-
-const stripePromise = STRIPE_PUBLISHABLE_KEY !== 'INSERISCI_TUA_PUBLISHABLE_KEY_QUI' 
-  ? loadStripe(STRIPE_PUBLISHABLE_KEY) 
+const stripePromise = isStripeConfigured()
+  ? loadStripe(STRIPE_CONFIG.publishableKey)
   : null;
 
 interface CheckoutModalProps {
@@ -86,25 +84,21 @@ function CheckoutForm({
       }
 
       // Salva l'ordine nel database
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-d9742687/orders`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${publicAnonKey}`,
-          },
-          body: JSON.stringify({
-            customerName,
-            customerEmail,
-            customerPhone,
-            customerAddress,
-            items,
-            total,
-            paymentIntentId: paymentIntent?.id,
-          }),
-        }
-      );
+      const response = await fetch('/.netlify/functions/orders', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          customerName,
+          customerEmail,
+          customerPhone,
+          customerAddress,
+          items,
+          total,
+          paymentIntentId: paymentIntent?.id,
+        }),
+      });
 
       const data = await response.json();
 
@@ -248,20 +242,16 @@ export default function CheckoutModal({ isOpen, onClose, total, items, onSuccess
     setError(null);
 
     try {
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-d9742687/create-payment-intent`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${publicAnonKey}`,
-          },
-          body: JSON.stringify({
-            amount: total,
-            currency: 'eur',
-          }),
-        }
-      );
+      const response = await fetch('/.netlify/functions/create-payment-intent', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          amount: total,
+          currency: STRIPE_CONFIG.currency,
+        }),
+      });
 
       const data = await response.json();
 
@@ -324,7 +314,7 @@ export default function CheckoutModal({ isOpen, onClose, total, items, onSuccess
                 ⚠️ Publishable Key Non Configurata
               </h3>
               <p className="text-sm text-orange-800 mb-4">
-                Per abilitare i pagamenti, devi sostituire la chiave Stripe nel file <code className="bg-white px-2 py-0.5 rounded font-mono text-xs">/components/CheckoutModal.tsx</code>
+                Per abilitare i pagamenti, configura <code className="bg-white px-2 py-0.5 rounded font-mono text-xs">VITE_STRIPE_PUBLISHABLE_KEY</code> nelle variabili d'ambiente (Netlify).
               </p>
               
               <div className="bg-white rounded-lg p-4 mb-4 border border-orange-200">
@@ -340,11 +330,11 @@ export default function CheckoutModal({ isOpen, onClose, total, items, onSuccess
                   </li>
                   <li className="flex gap-2">
                     <span className="font-bold text-orange-600">3.</span>
-                    <span>Apri <code className="bg-gray-100 px-1">/components/CheckoutModal.tsx</code></span>
+                    <span>Apri le variabili d'ambiente in Netlify</span>
                   </li>
                   <li className="flex gap-2">
                     <span className="font-bold text-orange-600">4.</span>
-                    <span>Riga 10: sostituisci <code className="bg-gray-100 px-1">'INSERISCI_TUA_PUBLISHABLE_KEY_QUI'</code> con la tua chiave</span>
+                    <span>Imposta <code className="bg-gray-100 px-1">VITE_STRIPE_PUBLISHABLE_KEY</code> con la tua chiave</span>
                   </li>
                   <li className="flex gap-2">
                     <span className="font-bold text-orange-600">5.</span>
@@ -358,7 +348,7 @@ export default function CheckoutModal({ isOpen, onClose, total, items, onSuccess
                   <strong>💡 Esempio:</strong>
                 </p>
                 <pre className="text-xs mt-2 bg-white p-2 rounded border border-blue-200 overflow-x-auto">
-<code>const STRIPE_PUBLISHABLE_KEY = 'pk_test_51Abc...';</code>
+<code>VITE_STRIPE_PUBLISHABLE_KEY=pk_test_51Abc...</code>
                 </pre>
               </div>
 
