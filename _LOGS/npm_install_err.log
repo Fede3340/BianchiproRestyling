@@ -1,0 +1,5 @@
+npm warn EBADENGINE Unsupported engine {
+npm warn EBADENGINE   package: 'Bianchipro Restyling@0.1.0',
+npm warn EBADENGINE   required: { node: '>=20 <23' },
+npm warn EBADENGINE   current: { node: 'v24.13.0', npm: '11.6.2' }
+npm warn EBADENGINE }

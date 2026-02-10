@@ -1,0 +1,6 @@
+﻿{
+    "frontend":  41648,
+    "cloudflared":  0,
+    "base":  "http://127.0.0.1:3000/",
+    "port":  3000
+}
