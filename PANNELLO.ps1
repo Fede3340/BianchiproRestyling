@@ -99,7 +99,7 @@ function Start-Local { param([bool]$OpenBrowser = $true)
   Info "Avvio npm run dev..."
   
   # CRITICAL: Usa cmd.exe con redirect > per i log, NO -RedirectStandardOutput
-  $cmdLine = "cd /d `"$ScriptDir`" && npm run dev -- --host 127.0.0.1 --port $FrontPort --open false > `"$logOut`" 2> `"$logErr`""
+  $cmdLine = "cd /d `"$ScriptDir`" && npm run dev -- --host 127.0.0.1 --port $FrontPort > `"$logOut`" 2> `"$logErr`""
   $proc = Start-Process -FilePath "cmd.exe" -ArgumentList "/c",$cmdLine -WorkingDirectory $ScriptDir -PassThru -WindowStyle Minimized
 
   $st = NewState

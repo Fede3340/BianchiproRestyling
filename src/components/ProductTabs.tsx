@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { FileText, Wrench, Package, AlertCircle, Shield, Zap, Phone, ShieldCheck, Loader2 } from 'lucide-react';
 import { projectId, publicAnonKey } from '../utils/supabase/info';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 export default function ProductTabs() {
   const [activeTab, setActiveTab] = useState('description');

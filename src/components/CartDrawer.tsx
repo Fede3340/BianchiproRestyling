@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ShoppingCart, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 import { ImageWithFallback } from './figma/ImageWithFallback';
 import CheckoutModal from './CheckoutModal';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 interface CartItem {
   id: string;
