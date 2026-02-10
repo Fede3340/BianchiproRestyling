@@ -1,0 +1,81 @@
+$ROOT = "$env:USERPROFILE\Desktop\BianchiproRestyling"
+if(!(Test-Path $ROOT)){ throw "Cartella non trovata: $ROOT" }
+
+function Kill-Port([int]$port){
+  $rows = netstat -aon | findstr (":$port ")
+  if($rows){
+    $pids = $rows | ForEach-Object { ($_ -split '\s+')[-1] } | Sort-Object -Unique
+    foreach($id in $pids){ Stop-Process -Id $id -Force -ErrorAction SilentlyContinue }
+  }
+}
+
+# 1) Spegnere tutto (porta 3000)
+Kill-Port 3000
+
+# 2) Backup totale configurazioni PostCSS presenti in ROOT
+$ts = Get-Date -Format "yyyyMMdd_HHmmss"
+$backupDir = Join-Path $ROOT "__BACKUP_POSTCSS_$ts"
+New-Item -ItemType Directory -Path $backupDir -Force | Out-Null
+
+$cfgFiles = Get-ChildItem -Force -Path $ROOT -File | Where-Object {
+  $_.Name -like ".postcssrc*" -or $_.Name -like "postcss.config*"
+}
+
+foreach($f in $cfgFiles){
+  Move-Item -Force -Path $f.FullName -Destination $backupDir
+}
+
+# 3) Se package.json contiene la sezione "postcss", spostarla in backup e rimuoverla
+$PKG = Join-Path $ROOT "package.json"
+if(!(Test-Path $PKG)){ throw "Non trovo package.json in: $ROOT" }
+
+# Leggere e ripulire BOM se presente (solo per sicurezza)
+$bytes = [System.IO.File]::ReadAllBytes($PKG)
+if($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF){
+  [System.IO.File]::WriteAllBytes($PKG, $bytes[3..($bytes.Length-1)])
+}
+
+$pkgObj = Get-Content $PKG -Raw | ConvertFrom-Json
+$hasPostcss = $false
+foreach($p in $pkgObj.PSObject.Properties){
+  if($p.Name -eq "postcss"){ $hasPostcss = $true }
+}
+
+if($hasPostcss){
+  $postcssBackup = Join-Path $backupDir "postcss_da_package.json"
+  ($pkgObj.postcss | ConvertTo-Json -Depth 100) | Out-File -FilePath $postcssBackup -Encoding ASCII
+  $pkgObj.PSObject.Properties.Remove("postcss")
+
+  $json = ($pkgObj | ConvertTo-Json -Depth 100)
+  $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+  [System.IO.File]::WriteAllText($PKG, $json, $utf8NoBom)
+}
+
+# 4) Creare UN SOLO postcss.config.cjs (CommonJS .cjs, stabile con Vite)
+$postcssPath = Join-Path $ROOT "postcss.config.cjs"
+
+$postcssCjs = @"
+const has = (m) => { try { require.resolve(m); return true } catch (e) { return false } }
+
+const plugins = {}
+if (has('@tailwindcss/postcss')) plugins['@tailwindcss/postcss'] = {}
+if (has('tailwindcss')) plugins['tailwindcss'] = {}
+if (has('autoprefixer')) plugins['autoprefixer'] = {}
+
+module.exports = { plugins }
+"@
+
+# Scrivere senza BOM (ASCII basta per questo file)
+Set-Content -Path $postcssPath -Value $postcssCjs -Encoding ASCII
+
+# 5) Pulire cache Vite
+Remove-Item -Recurse -Force (Join-Path $ROOT "node_modules\.vite") -ErrorAction SilentlyContinue
+Remove-Item -Recurse -Force (Join-Path $ROOT ".vite") -ErrorAction SilentlyContinue
+
+# 6) Avvio
+Start-Process "cmd.exe" -WorkingDirectory $ROOT -ArgumentList "/k","npm run dev -- --host 127.0.0.1 --port 3000"
+
+Write-Host ""
+Write-Host "OK. Backup creato in: $backupDir"
+Write-Host "Se ora parte senza errori, il problema era un file PostCSS JSON con BOM."
+Write-Host "Aprire: http://127.0.0.1:3000"

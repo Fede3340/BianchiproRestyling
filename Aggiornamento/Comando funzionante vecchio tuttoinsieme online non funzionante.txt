@@ -1,0 +1,204 @@
+$ROOT = "$env:USERPROFILE\Desktop\tuttoinsieme"
+$BACK = Join-Path $ROOT "laravel-spedizionefacile-main"
+$NUXT = Join-Path $ROOT "nuxt-spedizionefacile-master"
+
+$PORT_UNICA = 8787
+$PORT_API   = 8000
+$PORT_NUXT  = 3001
+$BASE = "http://127.0.0.1:$PORT_UNICA"
+
+if(!(Test-Path $ROOT)){ throw "Non trovo: $ROOT" }
+if(!(Test-Path (Join-Path $BACK "artisan"))){ throw "Non trovo Laravel (artisan) in: $BACK" }
+if(!(Test-Path (Join-Path $NUXT "package.json"))){ throw "Non trovo Nuxt (package.json) in: $NUXT" }
+
+function WriteUtf8NoBom($path, $content){
+  $enc = New-Object System.Text.UTF8Encoding($false)
+  [System.IO.File]::WriteAllText($path, $content, $enc)
+}
+function WriteAscii($path, $content){
+  Set-Content -Path $path -Value $content -Encoding ASCII
+}
+function KillPort([int]$port){
+  $rows = netstat -aon | findstr (":$port ")
+  if($rows){
+    $pids = $rows | ForEach-Object { ($_ -split '\s+')[-1] } | Sort-Object -Unique
+    foreach($id in $pids){ Stop-Process -Id $id -Force -ErrorAction SilentlyContinue }
+  }
+}
+
+WriteUtf8NoBom (Join-Path $ROOT "BASE_URL.txt") $BASE
+
+# Caddyfile corretto: 8787 -> API 8000, resto -> Nuxt 3001
+$caddy = @(
+":$PORT_UNICA {",
+"  @api path /api/* /sanctum/*",
+"  reverse_proxy @api 127.0.0.1:$PORT_API",
+"  reverse_proxy 127.0.0.1:$PORT_NUXT",
+"}"
+) -join "`r`n"
+WriteUtf8NoBom (Join-Path $ROOT "Caddyfile") $caddy
+
+# CHIUDI_TUTTO
+$chiudi = @'
+$ErrorActionPreference = "SilentlyContinue"
+$root = "__ROOT__"
+$pidf = Join-Path $root "PIDS.json"
+$cfpf = Join-Path $root "CLOUDFLARED_PID.txt"
+
+function Kill-Port([int]$port){
+  $rows = netstat -aon | findstr (":$port ")
+  if($rows){
+    $pids = $rows | ForEach-Object { ($_ -split '\s+')[-1] } | Sort-Object -Unique
+    foreach($procId in $pids){
+      Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue
+    }
+  }
+}
+
+# 1) Chiudere cloudflared se era acceso
+if(Test-Path $cfpf){
+  try{
+    $cfPid = (Get-Content $cfpf -Raw).Trim()
+    if($cfPid){ Stop-Process -Id $cfPid -Force -ErrorAction SilentlyContinue }
+  } catch {}
+  Remove-Item $cfpf -Force -ErrorAction SilentlyContinue
+}
+
+# 2) Chiudere processi salvati
+if(Test-Path $pidf){
+  try{
+    $p = Get-Content $pidf -Raw | ConvertFrom-Json
+    foreach($x in @($p.backend,$p.frontend,$p.caddy)){
+      if($x){ Stop-Process -Id $x -Force -ErrorAction SilentlyContinue }
+    }
+  } catch {}
+  Remove-Item $pidf -Force -ErrorAction SilentlyContinue
+}
+
+# 3) Chiudere per porta (robusto)
+Kill-Port __PORT_UNICA__
+Kill-Port __PORT_API__
+Kill-Port __PORT_NUXT__
+
+Write-Host "OK: Tuttoinsieme chiuso (porte __PORT_UNICA__/__PORT_API__/__PORT_NUXT__)."
+'@.Replace("__ROOT__", $ROOT).Replace("__PORT_UNICA__", "$PORT_UNICA").Replace("__PORT_API__", "$PORT_API").Replace("__PORT_NUXT__", "$PORT_NUXT")
+
+WriteUtf8NoBom (Join-Path $ROOT "CHIUDI_TUTTO.ps1") $chiudi
+WriteAscii (Join-Path $ROOT "CHIUDI_TUTTO.bat") (@(
+'@echo off',
+'powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0CHIUDI_TUTTO.ps1"',
+'if errorlevel 1 pause'
+) -join "`r`n")
+
+# AUTO_AVVIO_TOTALE (locale: apre SOLO 8787)
+$auto = @'
+param([switch]$NonAprireBrowser)
+
+$ErrorActionPreference = "Stop"
+$root = "__ROOT__"
+$back = "__BACK__"
+$nuxt = "__NUXT__"
+$base = "__BASE__"
+$pidf = Join-Path $root "PIDS.json"
+
+powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root "CHIUDI_TUTTO.ps1") | Out-Null
+
+# Avvio Laravel 8000
+$pBack = Start-Process -FilePath "cmd.exe" -WorkingDirectory $back -WindowStyle Minimized -PassThru -ArgumentList "/k","php artisan serve --host 127.0.0.1 --port __PORT_API__"
+# Avvio Nuxt 3001
+$pNuxt = Start-Process -FilePath "cmd.exe" -WorkingDirectory $nuxt -WindowStyle Minimized -PassThru -ArgumentList "/k","npm run dev -- --host 127.0.0.1 --port __PORT_NUXT__"
+# Avvio Caddy 8787
+$pCaddy = Start-Process -FilePath "cmd.exe" -WorkingDirectory $root -WindowStyle Minimized -PassThru -ArgumentList "/k","caddy run --config .\Caddyfile --adapter caddyfile"
+
+@{ backend=$pBack.Id; frontend=$pNuxt.Id; caddy=$pCaddy.Id } | ConvertTo-Json | Set-Content -Path $pidf -Encoding ASCII
+
+# Attendere che 8787 risponda (evita scheda vuota)
+for($i=0; $i -lt 240; $i++){
+  if(Test-NetConnection -ComputerName 127.0.0.1 -Port __PORT_UNICA__ -InformationLevel Quiet){ break }
+  Start-Sleep -Milliseconds 500
+}
+
+if(-not $NonAprireBrowser){
+  Start-Process $base
+}
+
+Write-Host "TUTTOINSIEME LOCALE: $base"
+'@.Replace("__ROOT__", $ROOT).Replace("__BACK__", $BACK).Replace("__NUXT__", $NUXT).Replace("__BASE__", $BASE).
+   Replace("__PORT_UNICA__", "$PORT_UNICA").Replace("__PORT_API__", "$PORT_API").Replace("__PORT_NUXT__", "$PORT_NUXT")
+
+WriteUtf8NoBom (Join-Path $ROOT "AUTO_AVVIO_TOTALE.ps1") $auto
+
+WriteAscii (Join-Path $ROOT "AVVIA_TUTTO.bat") (@(
+'@echo off',
+'powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0AUTO_AVVIO_TOTALE.ps1"',
+'if errorlevel 1 pause'
+) -join "`r`n")
+
+# CONDIVIDI_ONLINE (apre SOLO trycloudflare)
+$condividi = @'
+$ErrorActionPreference = "Stop"
+$root = "__ROOT__"
+$base = "__BASE__"
+$log  = Join-Path $root "cloudflared.log"
+$cfpf = Join-Path $root "CLOUDFLARED_PID.txt"
+
+powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root "AUTO_AVVIO_TOTALE.ps1") -NonAprireBrowser | Out-Null
+
+if(-not (Get-Command cloudflared -ErrorAction SilentlyContinue)){
+  throw "cloudflared non trovato. Installare prima cloudflared."
+}
+
+# Quick tunnel: se esiste config.yml/config.yaml lo rinominiamo (backup)
+$cfDir = Join-Path $env:USERPROFILE ".cloudflared"
+$ts = Get-Date -Format "yyyyMMdd_HHmmss"
+$cfg1 = Join-Path $cfDir "config.yml"
+$cfg2 = Join-Path $cfDir "config.yaml"
+if(Test-Path $cfg1){ Rename-Item $cfg1 ("config.yml.bak_" + $ts) -Force }
+if(Test-Path $cfg2){ Rename-Item $cfg2 ("config.yaml.bak_" + $ts) -Force }
+
+Remove-Item $log -Force -ErrorAction SilentlyContinue
+$p = Start-Process -FilePath "cloudflared" -PassThru -WindowStyle Minimized `
+  -ArgumentList @("tunnel","--url",$base) `
+  -RedirectStandardOutput $log -RedirectStandardError $log
+Set-Content -Path $cfpf -Value $p.Id -Encoding ASCII
+
+$url = $null
+for($i=0; $i -lt 240; $i++){
+  if(Test-Path $log){
+    $t = Get-Content $log -Raw
+    if($t -match "https://[^\s]+trycloudflare\.com"){
+      $url = $matches[0]
+      break
+    }
+  }
+  Start-Sleep -Milliseconds 500
+}
+
+if($url){
+  Start-Process $url
+  Write-Host "TUTTOINSIEME ONLINE: $url"
+  Write-Host "Non chiudere questa finestra: se la chiudi, il link online si spegne."
+}else{
+  Write-Host "Non ho trovato il link trycloudflare nel tempo massimo. Controllare cloudflared.log."
+}
+
+Wait-Process -Id $p.Id
+'@.Replace("__ROOT__", $ROOT).Replace("__BASE__", $BASE)
+
+WriteUtf8NoBom (Join-Path $ROOT "CONDIVIDI_ONLINE.ps1") $condividi
+WriteAscii (Join-Path $ROOT "CONDIVIDI_ONLINE.bat") (@(
+'@echo off',
+'powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0CONDIVIDI_ONLINE.ps1"',
+'if errorlevel 1 pause'
+) -join "`r`n")
+
+# Pulizia di sicurezza: chiudere eventuali residui
+KillPort $PORT_UNICA
+KillPort $PORT_API
+KillPort $PORT_NUXT
+
+Write-Host ""
+Write-Host "OK TUTTOINSIEME."
+Write-Host "Locale:   AVVIA_TUTTO.bat  -> apre UNA sola scheda $BASE"
+Write-Host "Online:   CONDIVIDI_ONLINE.bat -> apre SOLO trycloudflare"
+Write-Host "Chiudere: CHIUDI_TUTTO.bat"

@@ -1,0 +1,460 @@
+
+$ErrorActionPreference = "Stop"
+
+function Write-Utf8NoBom([string]$Path,[string]$Text){
+  $enc = New-Object System.Text.UTF8Encoding($false)
+  [System.IO.File]::WriteAllText($Path,$Text,$enc)
+}
+function Write-Ascii([string]$Path,[string]$Text){
+  [System.IO.File]::WriteAllText($Path,$Text,[System.Text.Encoding]::ASCII)
+}
+function Require-Folder([string]$Path){
+  if(-not (Test-Path $Path)){ throw "Cartella non trovata: $Path" }
+}
+
+$Desktop = [Environment]::GetFolderPath("Desktop")
+$ROOT    = Join-Path $Desktop "tuttoinsieme"
+Require-Folder $ROOT
+
+# =========================
+# PANNELLO.ps1 (PowerShell 5.1 compatibile)
+# =========================
+$PANEL = @'
+param(
+  [string]$Azione = "MENU"
+)
+
+$ErrorActionPreference = "Stop"
+$root = Split-Path -Parent $MyInvocation.MyCommand.Path
+
+$statePath = Join-Path $root "_STATE.json"
+$portsPath = Join-Path $root "_PORTS.json"
+$logsDir   = Join-Path $root "_LOGS"
+New-Item -ItemType Directory -Force -Path $logsDir | Out-Null
+
+function T([string]$m,[string]$c="Gray"){
+  $ts=(Get-Date).ToString("HH:mm:ss")
+  Write-Host "[$ts] $m" -ForegroundColor $c
+}
+function Save-Json([string]$Path,[object]$Obj){
+  ($Obj | ConvertTo-Json -Depth 20) | Set-Content -Encoding UTF8 -Path $Path
+}
+function Load-Json([string]$Path){
+  if(Test-Path $Path){
+    try { return (Get-Content $Path -Raw | ConvertFrom-Json) } catch { return $null }
+  }
+  return $null
+}
+function Get-FreePort([int]$Preferred){
+  $p=$Preferred
+  while($true){
+    try{
+      $l = New-Object System.Net.Sockets.TcpListener([System.Net.IPAddress]::Loopback,$p)
+      $l.Start(); $l.Stop()
+      return $p
+    } catch { $p++ }
+  }
+}
+function Find-Dir-WithAny([string[]]$fileNames){
+  $dirs = Get-ChildItem -Path $root -Directory -ErrorAction SilentlyContinue
+  foreach($d in $dirs){
+    foreach($f in $fileNames){
+      if(Test-Path (Join-Path $d.FullName $f)){ return $d.FullName }
+    }
+  }
+  return $null
+}
+function Find-Frontend(){
+  # Nuxt: nuxt.config.* deve stare nella cartella del front
+  $p = Find-Dir-WithAny @("nuxt.config.ts","nuxt.config.js","nuxt.config.mjs")
+  if($p){ return $p }
+  throw "Non trovo il FRONT (Nuxt): manca nuxt.config.ts/js/mjs in una sottocartella di: $root"
+}
+function Find-Backend(){
+  $p = Find-Dir-WithAny @("artisan")
+  if($p){ return $p }
+  throw "Non trovo il BACK (Laravel): manca il file artisan in una sottocartella di: $root"
+}
+function Has-Caddyfile(){
+  return (Test-Path (Join-Path $root "Caddyfile"))
+}
+function CmdLineOfPid([int]$procId){
+  try {
+    $w = Get-CimInstance Win32_Process -Filter ("ProcessId=" + $procId)
+    if($w -and $w.CommandLine){ return $w.CommandLine } else { return "" }
+  } catch { return "" }
+}
+function Stop-Tree([int]$procId){
+  if(-not $procId){ return }
+  if($procId -le 10){ return } # evita PID 0/4 e roba critica
+  try{
+    cmd /c ("taskkill /PID " + $procId + " /T /F") | Out-Null
+  } catch {}
+}
+function Safe-Kill-ByPort([int]$port){
+  # uccide SOLO se il processo appartiene a tuttoinsieme (command line contiene la cartella root)
+  try{
+    $conns = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
+    if(-not $conns){ return }
+    $pids = $conns | Select-Object -ExpandProperty OwningProcess -Unique
+    foreach($p in $pids){
+      if(-not $p){ continue }
+      if($p -le 10){ continue }
+      $cl = CmdLineOfPid $p
+      if($cl -and ($cl -like ("*" + $root + "*"))){
+        Stop-Tree $p
+      }
+    }
+  } catch {}
+}
+function Read-State(){
+  $s = Load-Json $statePath
+  if(-not $s){ $s = [pscustomobject]@{} }
+  return $s
+}
+function Write-State($s){
+  Save-Json $statePath $s
+}
+function Clear-State(){
+  Remove-Item $statePath -Force -ErrorAction SilentlyContinue | Out-Null
+}
+
+function Ensure-Ports(){
+  $ports = Load-Json $portsPath
+  if(-not $ports){
+    $ports = [pscustomobject]@{ front = 3001; back = 8000; proxy = 8787 }
+  }
+  $ports.front = Get-FreePort ([int]$ports.front)
+  $ports.back  = Get-FreePort ([int]$ports.back)
+  $ports.proxy = Get-FreePort ([int]$ports.proxy)
+  Save-Json $portsPath $ports
+  return $ports
+}
+
+function Start-CmdLogged([string]$name,[string]$command,[string]$workDir){
+  $out = Join-Path $logsDir ($name + ".out.log")
+  $err = Join-Path $logsDir ($name + ".err.log")
+  Remove-Item $out,$err -Force -ErrorAction SilentlyContinue | Out-Null
+
+  # IMPORTANTE: stdout e stderr su file diversi (altrimenti Start-Process va in errore)
+  $p = Start-Process -FilePath "cmd.exe" `
+    -ArgumentList @("/c",$command) `
+    -WorkingDirectory $workDir `
+    -PassThru `
+    -WindowStyle Hidden `
+    -RedirectStandardOutput $out `
+    -RedirectStandardError  $err
+
+  return [pscustomobject]@{ id=$p.Id; out=$out; err=$err }
+}
+
+function Wait-Http([string]$url,[int]$timeoutSec=240){
+  $start = Get-Date
+  while(((Get-Date) - $start).TotalSeconds -lt $timeoutSec){
+    try{
+      $req = [System.Net.HttpWebRequest]::Create($url)
+      $req.Method = "GET"
+      $req.Timeout = 2000
+      $resp = $req.GetResponse()
+      $code = [int]$resp.StatusCode
+      $resp.Close()
+      if($code -ge 200 -and $code -lt 500){ return $true }
+    } catch [System.Net.WebException] {
+      if($_.Exception.Response){
+        try{
+          $r = $_.Exception.Response
+          $code = [int]$r.StatusCode
+          $r.Close()
+          # 502 = proxy non pronto, continua ad aspettare
+          if($code -ge 200 -and $code -lt 500 -and $code -ne 502){ return $true }
+        } catch {}
+      }
+    } catch {}
+    Start-Sleep -Milliseconds 500
+  }
+  return $false
+}
+
+function Stop-All(){
+  T "Chiusura completa (solo tuttoinsieme)..." "Yellow"
+
+  $s = Read-State
+  foreach($k in @("cloudflared","caddy","frontend","backend")){
+    try{
+      $procId = [int]($s.$k)
+      if($procId -gt 0){
+        Stop-Tree $procId
+      }
+    } catch {}
+  }
+
+  # anche per porta, ma SOLO se il comando contiene la cartella root
+  $ports = Load-Json $portsPath
+  if($ports){
+    Safe-Kill-ByPort ([int]$ports.proxy)
+    Safe-Kill-ByPort ([int]$ports.front)
+    Safe-Kill-ByPort ([int]$ports.back)
+  }
+
+  Clear-State
+  T "OK: tuttoinsieme chiuso." "Green"
+}
+
+function Start-Local([switch]$NonAprireBrowser,[switch]$SoloAvvio){
+  Stop-All
+
+  $ports = Ensure-Ports
+  $frontDir = Find-Frontend
+  $backDir  = Find-Backend
+
+  $frontPort = [int]$ports.front
+  $backPort  = [int]$ports.back
+  $proxyPort = [int]$ports.proxy
+
+  $useCaddy = $false
+  if(Has-Caddyfile){
+    try { if(Get-Command caddy -ErrorAction SilentlyContinue){ $useCaddy = $true } } catch {}
+  }
+
+  $base = "http://127.0.0.1:$frontPort"
+  if($useCaddy){ $base = "http://127.0.0.1:$proxyPort" }
+
+  T "==============================" "Cyan"
+  T "TUTTOINSIEME - AVVIO LOCALE" "Cyan"
+  T "==============================" "Cyan"
+  T ("FRONT: " + $frontDir) "DarkGray"
+  T ("BACK : " + $backDir)  "DarkGray"
+
+  # permettere richieste dal tunnel (se mai servisse)
+  $env:__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS = ".trycloudflare.com"
+
+  $pBack  = Start-CmdLogged "backend"  ("php artisan serve --host 127.0.0.1 --port " + $backPort) $backDir
+  T ("Backend avviato su http://127.0.0.1:" + $backPort) "Gray"
+
+  $pFront = Start-CmdLogged "frontend" ("npx nuxi dev --host 127.0.0.1 --port " + $frontPort) $frontDir
+  T ("Frontend avviato su http://127.0.0.1:" + $frontPort) "Gray"
+
+  $pCaddy = $null
+  if($useCaddy){
+    $pCaddy = Start-CmdLogged "caddy" "caddy run --config Caddyfile --adapter caddyfile" $root
+    T ("Proxy avviato su http://127.0.0.1:" + $proxyPort) "Gray"
+  } else {
+    T "Caddy non usato (manca Caddyfile o caddy non installato): base = frontend." "Yellow"
+  }
+
+  $s = [pscustomobject]@{
+    frontend    = $pFront.id
+    backend     = $pBack.id
+    caddy       = $(if($pCaddy){$pCaddy.id}else{0})
+    cloudflared = 0
+    base        = $base
+  }
+  Write-State $s
+
+  T "Attendere: caricamento..." "Yellow"
+  if(-not (Wait-Http $base 300)){
+    T ("ERRORE: non risponde " + $base) "Red"
+    T ("Aprire log: " + $logsDir) "Red"
+    return
+  }
+
+  T ("PRONTO (LOCALE): " + $base) "Green"
+  if(-not $NonAprireBrowser){
+    Start-Process $base
+  }
+
+  if($SoloAvvio){ return }
+
+  T "Comandi: O=riaprire | L=aprire cartella log | Q=chiudere tutto" "Yellow"
+  while($true){
+    if([Console]::KeyAvailable){
+      $k = [Console]::ReadKey($true)
+      $key = ($k.KeyChar.ToString()).ToUpper()
+      if($key -eq "O"){ Start-Process $base }
+      elseif($key -eq "L"){ Start-Process $logsDir }
+      elseif($key -eq "Q"){ break }
+    }
+    Start-Sleep -Milliseconds 200
+  }
+
+  Stop-All
+}
+
+function Share-Online(){
+  # Avvia locale in modo “silenzioso” (non apre browser) e poi apre SOLO quando il link pubblico è pronto
+  Start-Local -NonAprireBrowser -SoloAvvio
+
+  $s = Read-State
+  $base = $s.base
+  if(-not $base){ $base = "http://127.0.0.1:8787" }
+
+  T "==============================" "Cyan"
+  T "TUTTOINSIEME - CONDIVISIONE ONLINE" "Cyan"
+  T "==============================" "Cyan"
+  T ("Base locale: " + $base) "Gray"
+
+  # cloudflared: se esiste config.yml potrebbe interferire con i tunnel rapidi, quindi lo rinomino temporaneamente
+  $cfDir = Join-Path $env:USERPROFILE ".cloudflared"
+  $bak = @()
+  try{
+    foreach($name in @("config.yml","config.yaml")){
+      $p = Join-Path $cfDir $name
+      if(Test-Path $p){
+        $b = ($p + ".bak_" + (Get-Date).ToString("yyyyMMdd_HHmmss"))
+        Move-Item $p $b -Force
+        $bak += @(@($p,$b))
+      }
+    }
+
+    $cmd = Get-Command cloudflared -ErrorAction SilentlyContinue
+    if(-not $cmd){ throw "cloudflared non trovato. Installarlo o metterlo nel PATH." }
+    $cloudflared = $cmd.Source
+
+    $out = Join-Path $logsDir "cloudflared.out.log"
+    $err = Join-Path $logsDir "cloudflared.err.log"
+    Remove-Item $out,$err -Force -ErrorAction SilentlyContinue | Out-Null
+
+    # FIX: Vite blocca host trycloudflare casuale -> cloudflared forza Host=localhost
+    # (cosi' Vite vede localhost e non blocca)
+    $args = @("tunnel","--url",$base,"--http-host-header","localhost")
+    $pTun = Start-Process -FilePath $cloudflared -ArgumentList $args -PassThru -WindowStyle Hidden `
+      -RedirectStandardOutput $out -RedirectStandardError $err
+
+    $s.cloudflared = $pTun.Id
+    Write-State $s
+
+    T "Tunnel in avvio... attendere link pubblico..." "Yellow"
+
+    $pattern = "https://[a-zA-Z0-9-]+\.trycloudflare\.com"
+    $pub = $null
+    $start = Get-Date
+    while(-not $pub -and ((Get-Date)-$start).TotalSeconds -lt 180){
+      $txt = ""
+      if(Test-Path $out){ $txt += (Get-Content $out -Raw) }
+      if(Test-Path $err){ $txt += "`n" + (Get-Content $err -Raw) }
+      if($txt -match $pattern){ $pub = $matches[0] }
+      Start-Sleep -Milliseconds 400
+    }
+    if(-not $pub){
+      T "ERRORE: non trovo il link pubblico. Aprire cartella log." "Red"
+      Start-Process $logsDir
+      return
+    }
+
+    $urlFile = Join-Path $root "URL_ONLINE.txt"
+    Set-Content -Encoding ASCII -Path $urlFile -Value $pub
+
+    T ("PRONTO (ONLINE): " + $pub) "Green"
+    T ("Link salvato in: " + $urlFile) "DarkGreen"
+
+    T "Attendere: apro il link solo quando risponde..." "Yellow"
+    [void](Wait-Http $pub 120)
+
+    Start-Process $pub
+
+    T "Comandi: O=riaprire | L=log | Q=chiudere tunnel+locale" "Yellow"
+    while($true){
+      if([Console]::KeyAvailable){
+        $k = [Console]::ReadKey($true)
+        $key = ($k.KeyChar.ToString()).ToUpper()
+        if($key -eq "O"){ Start-Process $pub }
+        elseif($key -eq "L"){ Start-Process $logsDir }
+        elseif($key -eq "Q"){ break }
+      }
+      Start-Sleep -Milliseconds 200
+    }
+
+  } finally {
+    foreach($pair in $bak){
+      $orig = $pair[0]; $backup = $pair[1]
+      if(Test-Path $backup){ Move-Item $backup $orig -Force }
+    }
+  }
+
+  Stop-All
+}
+
+function Menu(){
+  while($true){
+    Write-Host ""
+    T "==============================" "Cyan"
+    T "TUTTOINSIEME - PANNELLO" "Cyan"
+    T "==============================" "Cyan"
+    Write-Host "1) Avvia LOCALE" -ForegroundColor White
+    Write-Host "2) Condividi ONLINE (TryCloudflare)" -ForegroundColor White
+    Write-Host "3) Apri cartella LOG" -ForegroundColor White
+    Write-Host "4) Chiudi TUTTO" -ForegroundColor White
+    Write-Host "Q) Esci" -ForegroundColor White
+    Write-Host ""
+    $scelta = Read-Host "Scegli (1/2/3/4/Q)"
+    if(-not $scelta){ continue }
+    $s = $scelta.ToString().ToUpper()
+
+    if($s -eq "1"){ Start-Local }
+    elseif($s -eq "2"){ Share-Online }
+    elseif($s -eq "3"){ Start-Process $logsDir }
+    elseif($s -eq "4"){ Stop-All }
+    elseif($s -eq "Q"){ break }
+  }
+}
+
+try{
+  $a = ($Azione.ToString()).ToUpper()
+  if($a -eq "LOCALE"){ Start-Local }
+  elseif($a -eq "ONLINE"){ Share-Online }
+  elseif($a -eq "CHIUDI"){ Stop-All }
+  else { Menu }
+} catch {
+  Write-Host ""
+  Write-Host "ERRORE: $($_.Exception.Message)" -ForegroundColor Red
+  Write-Host "Premere INVIO per chiudere..." -ForegroundColor Yellow
+  Read-Host | Out-Null
+}
+'@
+
+Write-Utf8NoBom (Join-Path $ROOT "PANNELLO.ps1") $PANEL
+
+# =========================
+# BAT: una finestra sola, non si chiude subito
+# =========================
+$BAT_PANEL = @(
+'@echo off',
+'cd /d "%~dp0"',
+'powershell -NoProfile -ExecutionPolicy Bypass -NoExit -File "%~dp0PANNELLO.ps1"',
+'if errorlevel 1 pause'
+) -join "`r`n"
+Write-Ascii (Join-Path $ROOT "PANNELLO.bat") ($BAT_PANEL + "`r`n")
+
+$BAT_LOCAL = @(
+'@echo off',
+'cd /d "%~dp0"',
+'powershell -NoProfile -ExecutionPolicy Bypass -NoExit -File "%~dp0PANNELLO.ps1" -Azione LOCALE',
+'if errorlevel 1 pause'
+) -join "`r`n"
+Write-Ascii (Join-Path $ROOT "AVVIA_TUTTO.bat") ($BAT_LOCAL + "`r`n")
+
+$BAT_ONLINE = @(
+'@echo off',
+'cd /d "%~dp0"',
+'powershell -NoProfile -ExecutionPolicy Bypass -NoExit -File "%~dp0PANNELLO.ps1" -Azione ONLINE',
+'if errorlevel 1 pause'
+) -join "`r`n"
+Write-Ascii (Join-Path $ROOT "CONDIVIDI_ONLINE.bat") ($BAT_ONLINE + "`r`n")
+
+$BAT_CLOSE = @(
+'@echo off',
+'cd /d "%~dp0"',
+'powershell -NoProfile -ExecutionPolicy Bypass -NoExit -File "%~dp0PANNELLO.ps1" -Azione CHIUDI',
+'if errorlevel 1 pause'
+) -join "`r`n"
+Write-Ascii (Join-Path $ROOT "CHIUDI_TUTTO.bat") ($BAT_CLOSE + "`r`n")
+
+Write-Host ""
+Write-Host "FATTO. File aggiornati SOLO in: $ROOT" -ForegroundColor Green
+Write-Host "Ora usare in Desktop\tuttoinsieme:" -ForegroundColor Cyan
+Write-Host " - AVVIA_TUTTO.bat" -ForegroundColor Cyan
+Write-Host " - CONDIVIDI_ONLINE.bat" -ForegroundColor Cyan
+Write-Host " - CHIUDI_TUTTO.bat" -ForegroundColor Cyan
+Write-Host " - (opzionale) PANNELLO.bat" -ForegroundColor Cyan
+
+
