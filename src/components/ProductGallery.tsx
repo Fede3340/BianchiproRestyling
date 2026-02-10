@@ -8,7 +8,7 @@ import {
   Heart
 } from "lucide-react";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
-import mainImage from "figma:asset/f4ed0b934aabb9cdf06af64854509a5ac97f8256.png";
+import mainImage from "../assets/f4ed0b934aabb9cdf06af64854509a5ac97f8256.png";
 
 interface ProductGalleryProps {
   isFavorite: boolean;

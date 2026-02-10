@@ -1,8 +1,11 @@
-﻿import { defineConfig } from 'vite'
-import vue from '@vitejs/plugin-vue'
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react-swc'
 
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [react()],
+  build: {
+    outDir: 'build'
+  },
   server: {
     port: 3000,
     strictPort: true,
