@@ -1,9 +1,10 @@
-param([string]$Action = "")
+param([string]$Azione = "MENU")
 
 # ---------------------------------------------------------------------------
 # PANNELLO.ps1 - BianchiPro Restyling
 # Pannello di controllo per avvio locale, condivisione online e chiusura.
 # Compatibile con Windows PowerShell 5.1 (no ??, no &&, no $pid come variabile)
+# Parametro: -Azione (MENU, AVVIA_LOCALE, CONDIVIDI_ONLINE, CHIUDI_TUTTO, LOG)
 # ---------------------------------------------------------------------------
 
 $ErrorActionPreference = "Continue"
@@ -457,10 +458,11 @@ function ShowMenu {
 # ENTRY POINT
 # ---------------------------------------------------------------------------
 
-switch ($Action) {
-  "start" { StartLocal $true  | Out-Null; PauseKey }
-  "share" { ShareOnline       | Out-Null; PauseKey }
-  "stop"  { StopAll;                      PauseKey }
-  "logs"  { OpenLogs;                     PauseKey }
-  default { ShowMenu }
+switch ($Azione.ToUpper()) {
+  "AVVIA_LOCALE"      { StartLocal $true  | Out-Null; PauseKey }
+  "CONDIVIDI_ONLINE"  { ShareOnline       | Out-Null; PauseKey }
+  "CHIUDI_TUTTO"      { StopAll;                      PauseKey }
+  "LOG"               { OpenLogs;                     PauseKey }
+  "MENU"              { ShowMenu }
+  default             { ShowMenu }
 }
