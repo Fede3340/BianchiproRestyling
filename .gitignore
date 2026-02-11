@@ -2,3 +2,6 @@ build/
 *.log
 _STATE.json
 _LOGS/
+node_modules/@esbuild/linux-*/
+node_modules/@rollup/rollup-linux-*/
+node_modules/@swc/core-linux-*/
