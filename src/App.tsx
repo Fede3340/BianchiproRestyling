@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import Header from './components/Header';
 import ProductGallery from './components/ProductGallery';
 import ProductDetails from './components/ProductDetails';
@@ -15,6 +15,11 @@ import { toast } from 'sonner';
 import { Toaster } from './components/ui/sonner';
 import BackendStatus from './components/BackendStatus';
 import AppErrorBoundary from './components/AppErrorBoundary';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import AuthModal from './components/auth/AuthModal';
+import WalletPage from './components/wallet/WalletPage';
+import AdminDashboard from './components/admin/AdminDashboard';
+import AccountPage from './components/auth/AccountPage';
 
 interface CartItem {
   id: string;
@@ -34,39 +39,20 @@ interface FavoriteItem {
   brand: string;
 }
 
-export default function App() {
+type AppPage = 'home' | 'wallet' | 'admin' | 'account';
+
+function AppContent() {
+  const { user } = useAuth();
+
+  // Navigation state
+  const [currentPage, setCurrentPage] = useState<AppPage>('home');
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+
   // Product configuration state
   const [quantity, setQuantity] = useState(1);
   const [capacity, setCapacity] = useState('5-teglie');
   const [probe, setProbe] = useState('standard');
   const [selectedAccessories, setSelectedAccessories] = useState<number[]>([]);
-  
-  // Wrapper per setSelectedAccessories che aggiorna anche il carrello
-  const updateSelectedAccessories = (newSelection: number[]) => {
-    setSelectedAccessories(newSelection);
-    
-    // Se c'è un item corrente nel carrello, aggiornalo in tempo reale
-    if (currentCartItemId) {
-      const basePrice = 4106.52;
-      const probePrice = probe === 'doppia' ? 120 : probe === 'wireless' ? 180 : 0;
-      
-      const selectedAccessoriesData = accessories
-        .filter(acc => newSelection.includes(acc.id))
-        .map(acc => ({ name: acc.name, price: acc.price }));
-      
-      setCartItems(prev =>
-        prev.map(item =>
-          item.id === currentCartItemId
-            ? {
-                ...item,
-                price: basePrice + probePrice,
-                accessories: selectedAccessoriesData.length > 0 ? selectedAccessoriesData : undefined
-              }
-            : item
-        )
-      );
-    }
-  };
 
   // Cart state
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
@@ -81,21 +67,44 @@ export default function App() {
   const currentProductId = 'AB5514';
   const isCurrentProductFavorite = favoriteItems.some(item => item.id === currentProductId);
 
+  // Wrapper per setSelectedAccessories che aggiorna anche il carrello
+  const updateSelectedAccessories = (newSelection: number[]) => {
+    setSelectedAccessories(newSelection);
+
+    // Se c'è un item corrente nel carrello, aggiornalo in tempo reale
+    if (currentCartItemId) {
+      const basePrice = 4106.52;
+      const probePrice = probe === 'doppia' ? 120 : probe === 'wireless' ? 180 : 0;
+
+      const selectedAccessoriesData = accessories
+        .filter(acc => newSelection.includes(acc.id))
+        .map(acc => ({ name: acc.name, price: acc.price }));
+
+      setCartItems(prev =>
+        prev.map(item =>
+          item.id === currentCartItemId
+            ? {
+                ...item,
+                price: basePrice + probePrice,
+                accessories: selectedAccessoriesData.length > 0 ? selectedAccessoriesData : undefined
+              }
+            : item
+        )
+      );
+    }
+  };
+
   const handleAddToCart = () => {
     const basePrice = 4106.52;
-
-    // Calculate probe price
     const probePrice = probe === 'doppia' ? 120 : probe === 'wireless' ? 180 : 0;
 
-    // Get ALL selected accessories details
     const selectedAccessoriesData = accessories
       .filter(acc => selectedAccessories.includes(acc.id))
       .map(acc => ({ name: acc.name, price: acc.price }))
       .sort((a, b) => a.name.localeCompare(b.name));
 
-    // Create options array
     const options = [
-      `Capacità: ${capacity.replace('-teglie', ' teglie')}`,
+      `Capacita: ${capacity.replace('-teglie', ' teglie')}`,
       `Sonda: ${probe.charAt(0).toUpperCase() + probe.slice(1)}`
     ];
 
@@ -107,7 +116,6 @@ export default function App() {
       const sameOptions = JSON.stringify(item.options || []) === JSON.stringify(options);
       const itemAccessories = [...(item.accessories || [])].sort((a, b) => a.name.localeCompare(b.name));
       const sameAccessories = JSON.stringify(itemAccessories) === JSON.stringify(normalizedAccessories || []);
-
       return sameName && samePrice && sameOptions && sameAccessories;
     });
 
@@ -125,7 +133,6 @@ export default function App() {
     }
 
     const itemId = `product-${Date.now()}`;
-
     const newItem: CartItem = {
       id: itemId,
       name: 'Abbattitore di Temperatura AB5514 Forcar',
@@ -138,8 +145,6 @@ export default function App() {
 
     setCartItems(prev => [...prev, newItem]);
     setCurrentCartItemId(itemId);
-
-    // NON resettiamo più le selezioni - così rimangono attive per aggiornamenti in tempo reale
   };
 
   const handleAddAccessoryToCart = (accessory: { id: number; name: string; price: number; img: string | null }) => {
@@ -157,7 +162,6 @@ export default function App() {
       );
     } else {
       const itemId = `accessory-${accessory.id}-${Date.now()}`;
-
       const newItem: CartItem = {
         id: itemId,
         name: accessory.name,
@@ -165,12 +169,10 @@ export default function App() {
         quantity: 1,
         image: accessory.img || mainImage,
       };
-
       setCartItems(prev => [...prev, newItem]);
     }
 
-    // Feedback toast per confermare l'aggiunta
-    toast.success(`✓ ${accessory.name}`, {
+    toast.success(`${accessory.name}`, {
       description: 'Aggiunto al carrello',
       duration: 2000,
     });
@@ -178,7 +180,6 @@ export default function App() {
 
   const handleRemoveItem = (id: string) => {
     setCartItems(prev => prev.filter(item => item.id !== id));
-    // Se rimuoviamo l'item corrente, resettiamo il riferimento
     if (id === currentCartItemId) {
       setCurrentCartItemId(null);
       setSelectedAccessories([]);
@@ -207,10 +208,8 @@ export default function App() {
 
   const handleToggleFavorite = () => {
     if (isCurrentProductFavorite) {
-      // Remove from favorites
       setFavoriteItems(prev => prev.filter(item => item.id !== currentProductId));
     } else {
-      // Add to favorites
       const newFavorite: FavoriteItem = {
         id: currentProductId,
         name: 'Abbattitore di Temperatura AB5514 Forcar',
@@ -232,79 +231,163 @@ export default function App() {
 
   const totalCartItems = cartItems.reduce((sum, item) => sum + item.quantity, 0);
 
+  const handleAccountClick = () => {
+    if (user) {
+      setCurrentPage('account');
+    } else {
+      setAuthModalOpen(true);
+    }
+  };
+
+  const handleNavigate = (page: string) => {
+    setCurrentPage(page as AppPage);
+  };
+
+  const handleLogoClick = () => {
+    setCurrentPage('home');
+  };
 
   return (
     <AppErrorBoundary>
     <div className="min-h-screen bg-gray-50 overflow-x-hidden">
-      <Header 
-        cartItemCount={totalCartItems} 
+      <Header
+        cartItemCount={totalCartItems}
         onCartClick={handleCartClick}
         favoritesCount={favoriteItems.length}
         onFavoritesClick={handleFavoritesClick}
+        onAccountClick={handleAccountClick}
+        onLogoClick={handleLogoClick}
+        user={user}
+        currentPage={currentPage}
+        onNavigate={handleNavigate}
       />
-      
-      <main className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-5 py-8 mb-20">
-        {/* Breadcrumb migliorato */}
-        <nav className="flex items-center space-x-2 text-sm mb-8">
-          <a href="#" className="text-gray-600 hover:text-green-600 transition-colors">Home</a>
-          <ChevronRight className="w-4 h-4 text-gray-400" />
-          <a href="#" className="text-gray-600 hover:text-green-600 transition-colors">Linea Freddo</a>
-          <ChevronRight className="w-4 h-4 text-gray-400" />
-          <span className="text-gray-900 font-medium">Abbattitore di Temperatura</span>
-        </nav>
 
-        {/* Product Section */}
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden mb-12">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 p-6 lg:p-8 lg:items-start">
-            <ProductGallery 
-              isFavorite={isCurrentProductFavorite}
-              onToggleFavorite={handleToggleFavorite}
-            />
-            <ProductDetails 
-              quantity={quantity}
-              setQuantity={setQuantity}
-              capacity={capacity}
-              setCapacity={setCapacity}
-              probe={probe}
-              setProbe={setProbe}
-              selectedAccessories={selectedAccessories}
-              setSelectedAccessories={updateSelectedAccessories}
-              onAddToCart={handleAddToCart}
-              onAddAccessoryToCart={handleAddAccessoryToCart}
-              isFavorite={isCurrentProductFavorite}
-              onToggleFavorite={handleToggleFavorite}
-            />
+      {currentPage === 'home' && (
+        <main className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-5 py-8 mb-20">
+          {/* Breadcrumb */}
+          <nav className="flex items-center space-x-2 text-sm mb-8">
+            <a href="#" onClick={(e) => { e.preventDefault(); setCurrentPage('home'); }} className="text-gray-600 hover:text-green-600 transition-colors">Home</a>
+            <ChevronRight className="w-4 h-4 text-gray-400" />
+            <a href="#" className="text-gray-600 hover:text-green-600 transition-colors">Linea Freddo</a>
+            <ChevronRight className="w-4 h-4 text-gray-400" />
+            <span className="text-gray-900 font-medium">Abbattitore di Temperatura</span>
+          </nav>
+
+          {/* Product Section */}
+          <div className="bg-white rounded-xl shadow-sm overflow-hidden mb-12">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 p-6 lg:p-8 lg:items-start">
+              <ProductGallery
+                isFavorite={isCurrentProductFavorite}
+                onToggleFavorite={handleToggleFavorite}
+              />
+              <ProductDetails
+                quantity={quantity}
+                setQuantity={setQuantity}
+                capacity={capacity}
+                setCapacity={setCapacity}
+                probe={probe}
+                setProbe={setProbe}
+                selectedAccessories={selectedAccessories}
+                setSelectedAccessories={updateSelectedAccessories}
+                onAddToCart={handleAddToCart}
+                onAddAccessoryToCart={handleAddAccessoryToCart}
+                isFavorite={isCurrentProductFavorite}
+                onToggleFavorite={handleToggleFavorite}
+              />
+            </div>
           </div>
-        </div>
 
-        {/* Trust Badges */}
-        <div className="mb-12">
-          <TrustBadges />
-        </div>
+          {/* Trust Badges */}
+          <div className="mb-12">
+            <TrustBadges />
+          </div>
 
-        {/* Separatore visivo */}
-        <div className="h-px bg-gradient-to-r from-transparent via-gray-200 to-transparent mb-12"></div>
+          <div className="h-px bg-gradient-to-r from-transparent via-gray-200 to-transparent mb-12"></div>
 
-        {/* Product Tabs - informazioni organizzate meglio */}
-        <div className="mb-12">
-          <ProductTabs />
-        </div>
+          <div className="mb-12">
+            <ProductTabs />
+          </div>
 
-        {/* Separatore visivo */}
-        <div className="h-px bg-gradient-to-r from-transparent via-gray-200 to-transparent mb-12"></div>
+          <div className="h-px bg-gradient-to-r from-transparent via-gray-200 to-transparent mb-12"></div>
 
-        {/* Feedaty Reviews - Widget espanso */}
-        <div className="mb-12">
-          <FeedatyReviews />
-        </div>
+          <div className="mb-12">
+            <FeedatyReviews />
+          </div>
+        </main>
+      )}
 
-      </main>
+      {currentPage === 'wallet' && (
+        <main className="mb-20">
+          {user ? (
+            <WalletPage />
+          ) : (
+            <div className="max-w-lg mx-auto px-4 py-16 text-center">
+              <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <svg className="w-8 h-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a2.25 2.25 0 00-2.25-2.25H15a3 3 0 11-6 0H5.25A2.25 2.25 0 003 12m18 0v6a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18v-6m18 0V9M3 12V9m18 0a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 9m18 0V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v3" />
+                </svg>
+              </div>
+              <h2 className="text-xl font-bold text-gray-900 mb-2">Accedi per vedere il tuo Wallet</h2>
+              <p className="text-gray-600 mb-6">Effettua il login per gestire il tuo wallet, ricaricare e prelevare fondi.</p>
+              <button
+                onClick={() => setAuthModalOpen(true)}
+                className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition-colors"
+              >
+                Accedi o Registrati
+              </button>
+            </div>
+          )}
+        </main>
+      )}
+
+      {currentPage === 'admin' && (
+        <main className="mb-20">
+          {user?.role === 'admin' ? (
+            <AdminDashboard />
+          ) : (
+            <div className="max-w-lg mx-auto px-4 py-16 text-center">
+              <div className="w-16 h-16 bg-red-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <svg className="w-8 h-8 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                </svg>
+              </div>
+              <h2 className="text-xl font-bold text-gray-900 mb-2">Accesso non autorizzato</h2>
+              <p className="text-gray-600 mb-6">Solo gli amministratori possono accedere a questa sezione.</p>
+              <button
+                onClick={() => setCurrentPage('home')}
+                className="px-6 py-3 bg-gray-900 hover:bg-gray-800 text-white font-bold rounded-xl transition-colors"
+              >
+                Torna alla Home
+              </button>
+            </div>
+          )}
+        </main>
+      )}
+
+      {currentPage === 'account' && (
+        <main className="mb-20">
+          {user ? (
+            <AccountPage onNavigate={handleNavigate} />
+          ) : (
+            <div className="max-w-lg mx-auto px-4 py-16 text-center">
+              <h2 className="text-xl font-bold text-gray-900 mb-2">Accedi al tuo account</h2>
+              <p className="text-gray-600 mb-6">Effettua il login per gestire il tuo profilo.</p>
+              <button
+                onClick={() => setAuthModalOpen(true)}
+                className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition-colors"
+              >
+                Accedi o Registrati
+              </button>
+            </div>
+          )}
+        </main>
+      )}
 
       <Footer />
 
       {/* Cart Drawer */}
       <AppErrorBoundary>
-      <CartDrawer 
+      <CartDrawer
         items={cartItems}
         onRemoveItem={handleRemoveItem}
         onUpdateQuantity={handleUpdateQuantity}
@@ -315,12 +398,15 @@ export default function App() {
       </AppErrorBoundary>
 
       {/* Favorites Drawer */}
-      <FavoritesDrawer 
+      <FavoritesDrawer
         items={favoriteItems}
         onRemoveItem={handleRemoveFavorite}
         isExpanded={favoritesExpanded}
         setIsExpanded={setFavoritesExpanded}
       />
+
+      {/* Auth Modal */}
+      <AuthModal isOpen={authModalOpen} onClose={() => setAuthModalOpen(false)} />
 
       {/* Toast Notifications */}
       <Toaster position="bottom-right" />
@@ -331,5 +417,13 @@ export default function App() {
       </AppErrorBoundary>
     </div>
     </AppErrorBoundary>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 }
