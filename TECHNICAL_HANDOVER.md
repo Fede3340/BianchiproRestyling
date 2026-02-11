@@ -1,6 +1,6 @@
 # Technical Handover - BianchiPro Restyling
 
-Data: 2026-02-10
+Data: 2026-02-11
 
 ## Panoramica progetto
 
@@ -38,8 +38,11 @@ BianchiproRestyling/
   netlify.toml                      # Deploy config Netlify
   PANNELLO.ps1                      # Script automazione avvio/condivisione (Windows)
   PANNELLO.bat                      # Launcher per PANNELLO.ps1
-  AVVIA_TUTTO.bat / AVVIA_LOCALE.bat / CHIUDI_TUTTO.bat / CONDIVIDI_ONLINE.bat
-  _LOGS/                            # Log di runtime (frontend, tunnel)
+  AVVIA_TUTTO.bat                   # Scorciatoia: avvia locale
+  AVVIA_LOCALE.bat                  # Scorciatoia: avvia locale (identico)
+  CHIUDI_TUTTO.bat                  # Scorciatoia: chiudi tutti i processi
+  CONDIVIDI_ONLINE.bat              # Scorciatoia: tunnel Cloudflare
+  _LOG/                             # Log di runtime (vite, cloudflared)
   _STATE.json                       # Stato processi avviati (PID)
 ```
 
@@ -50,98 +53,112 @@ BianchiproRestyling/
 ### 1. vite.config.ts importava `@vitejs/plugin-vue` (progetto React)
 
 **File**: `vite.config.ts`
-**Problema**: Il file importava `@vitejs/plugin-vue` ma il progetto usa React (`.tsx`, `react-dom`, `createRoot`). L'unico plugin installato in `node_modules` e' `@vitejs/plugin-react-swc`. Vite non poteva partire.
+**Problema**: Il file importava `@vitejs/plugin-vue` ma il progetto usa React. L'unico plugin installato e' `@vitejs/plugin-react-swc`.
 **Fix**: Cambiato import e plugin a `@vitejs/plugin-react-swc`.
 
 ### 2. vite.config.ts aveva BOM (Byte Order Mark)
 
 **File**: `vite.config.ts`
-**Problema**: Il file iniziava con `EF BB BF` (UTF-8 BOM). Alcuni tool trattano il BOM come carattere invalido.
+**Problema**: Il file iniziava con `EF BB BF` (UTF-8 BOM).
 **Fix**: File riscritto senza BOM.
 
 ### 3. build.outDir non corrispondeva a netlify.toml
 
 **File**: `vite.config.ts`, `netlify.toml`
-**Problema**: `netlify.toml` dichiara `publish = "build"` ma Vite di default produce output in `dist/`. La build su Netlify non troverebbe i file.
+**Problema**: `netlify.toml` dichiara `publish = "build"` ma Vite di default produce `dist/`.
 **Fix**: Aggiunto `build: { outDir: 'build' }` in `vite.config.ts`.
 
-### 4. ~70 import con versione nel modulo specifier (`"package@X.Y.Z"`)
+### 4. ~70 import con versione nel modulo specifier
 
-**File**: Tutti i file in `src/components/ui/`, piu' `src/App.tsx`, `src/components/CartDrawer.tsx`, `src/components/ProductTabs.tsx`
-**Problema**: Gli import usavano specifier come `"sonner@2.0.3"`, `"lucide-react@0.487.0"`, `"@radix-ui/react-dialog@1.1.6"`, ecc. Questi non sono moduli validi in Node/npm - la versione va in `package.json`, non nell'import. Probabilmente generati da uno strumento di code generation (Figma o simile) che include i numeri di versione.
-**Fix**: Rimosso il suffisso `@X.Y.Z` da tutti gli import. Esempio: `"sonner@2.0.3"` diventa `"sonner"`.
-**File coinvolti**: 47 file in `src/components/ui/` + 4 file in `src/` e `src/components/`.
+**File**: Tutti i file in `src/components/ui/` e vari in `src/`
+**Problema**: Import come `"sonner@2.0.3"`, `"lucide-react@0.487.0"` ecc. Non sono moduli validi.
+**Fix**: Rimosso il suffisso `@X.Y.Z` da tutti gli import.
 
 ### 5. Import `figma:asset/...` non risolvibile
 
 **File**: `src/App.tsx`, `src/components/ProductGallery.tsx`
-**Problema**: Usavano `import mainImage from "figma:asset/f4ed0b..."`. Il protocollo `figma:asset` non e' gestito da Vite (nessun plugin custom). Il file PNG esiste in `src/assets/`.
-**Fix**: Cambiato a path relativo: `"./assets/f4ed0b..."` e `"../assets/f4ed0b..."`.
+**Problema**: `figma:asset` non e' gestito da Vite.
+**Fix**: Cambiato a path relativi verso `src/assets/`.
 
-### 6. `_STATE.json` con BOM e struttura incompatibile
-
-**File**: `_STATE.json`
-**Problema**: Il file aveva BOM e usava campi `frontend`, `cloudflared`, `base`, `port`. Ma `PANNELLO.ps1` (funzione `NewState`) crea e legge campi `front_pid`, `tunnel_pid`, `last_url`. La funzione `StopAll` cercava `$st.front_pid` che non esisteva nel vecchio formato.
-**Fix**: Riscritto con struttura corretta `{"front_pid":0,"tunnel_pid":0,"last_url":""}` senza BOM.
-
-### 7. `AVVIA_TUTTO.bat` passava parametro sbagliato a PANNELLO.ps1
+### 6. AVVIA_TUTTO.bat corrotto con marcatori merge conflict
 
 **File**: `AVVIA_TUTTO.bat`
-**Problema**: Passava `-Azione AVVIA_LOCALE` ma `PANNELLO.ps1` dichiara `param([string]$Action = "")` e il suo `switch` accetta i valori `start`, `share`, `stop`, `logs`. Il parametro `-Azione` non esiste e `AVVIA_LOCALE` non e' un valore valido.
-**Fix**: Cambiato a `PANNELLO.ps1 start` (come fanno gli altri .bat).
+**Problema**: Conteneva `@@ -1,3 +1,4 @@` (diff header) e due righe PowerShell contraddittorie.
+**Fix**: Riscritto con una sola riga corretta.
 
-### 8. `PANNELLO.ps1` passava `--open false` a Vite
+### 7. Cartella log duplicata (`_LOG/` + `_LOGS/`)
 
-**File**: `PANNELLO.ps1` riga 102
-**Problema**: Il comando `npm run dev -- --host 127.0.0.1 --port $FrontPort --open false` e' problematico. Vite tratta `--open` come flag booleano; `--open false` puo' essere interpretato come "apri la pagina 'false'". Inoltre `vite.config.ts` ha gia' `open: false`, rendendo il flag ridondante.
-**Fix**: Rimosso `--open false` dal comando.
+**Problema**: Due cartelle di log con file diversi. PANNELLO.ps1 usa `_LOG/`.
+**Fix**: Rimossa `_LOGS/`, tenuta solo `_LOG/`.
 
----
+### 8. File di stato duplicato (`_STATE.json` + `_PANNELLO_STATE.json`)
 
-## Problemi noti NON corretti (da affrontare)
+**Problema**: Due file con strutture diverse. PANNELLO.ps1 usa `_STATE.json`.
+**Fix**: Rimosso `_PANNELLO_STATE.json`, resettato `_STATE.json`.
 
-### A. Node versione utente fuori dal range supportato
+### 9. Commento spazzatura in PANNELLO.ps1
 
-I log mostrano che l'utente usa Node v24.13.0 ma `engines` in `package.json` richiede `>=20 <23` e `.nvmrc` dice `20`. La build CI usa Node 20 (corretto). Sul PC dell'utente npm mostra warning `EBADENGINE`. Potrebbe causare comportamenti imprevisti in sviluppo locale.
-**Azione**: L'utente dovrebbe installare Node 20 LTS tramite nvm (`nvm install 20 && nvm use 20`).
-
-### B. Log `front_err.log`: "vite non e' riconosciuto"
-
-Il log `_LOGS/front_err.log` mostra che in una sessione precedente `vite` non era nel PATH. Questo succede quando `PANNELLO.ps1` lancia `cmd.exe /c "cd ... && npm run dev ..."` ma l'ambiente cmd.exe non ha Node/npm nel PATH. Il PANNELLO.ps1 attuale usa `npm run dev` (non `vite` direttamente), il che dovrebbe funzionare se npm e' nel PATH globale. Se il problema si ripresenta, verificare che Node sia installato globalmente o che nvm sia configurato per cmd.exe.
-
-### C. Doppia apertura schede browser
-
-Il report precedente segnalava che a volte si aprono due schede: una dallo script e una dal server Vite. Ora `vite.config.ts` ha `open: false` e il PANNELLO.ps1 non passa piu' `--open`, quindi l'unica apertura dovrebbe essere quella controllata dallo script (dopo `WaitPort`). Se il problema persiste, verificare che non ci siano altri file di configurazione Vite o variabili d'ambiente che forzano `open`.
-
-### D. Tailwind CSS / PostCSS configurazione
-
-`postcss.config.cjs` fa auto-detect di `@tailwindcss/postcss` o `tailwindcss`. Non c'e' un file `tailwind.config.*` nella root. Tailwind dovrebbe funzionare tramite le direttive CSS in `src/index.css`. Se la build fallisce su stili mancanti, verificare la versione di Tailwind installata e se serve un file di configurazione esplicito.
+**Problema**: Riga 198 conteneva `:contentReference[oaicite:1]{index=1}` (artefatto AI).
+**Fix**: Rimosso.
 
 ---
 
-## Script di automazione Windows - stato attuale
+## PANNELLO.ps1 - stato attuale
 
-### File e ruoli
+### Garanzie di compatibilita'
 
-| File | Funzione |
+- **Nessun uso di `$pid`**: variabile riservata PowerShell, mai usata come variabile utente
+- **Nessun operatore `??`**: compatibile con Windows PowerShell 5.1
+- **Nessun `&&`**: non usato (non supportato in PS 5.1)
+- **Tutto self-contained**: nessun dot-sourcing di file esterni, tutto in un unico file
+- **Nessuna funzione esterna**: niente `Crea-CartellaSeManca` o simili
+- **PID sicuri**: Kill-PidTree rifiuta PID <= 4 (processi di sistema)
+- **ArgumentList mai nullo**: Start-Process riceve sempre argomenti validi
+
+### Menu (7 opzioni + Esci)
+
+| Tasto | Azione |
 |---|---|
-| `PANNELLO.bat` | Menu interattivo (1=Avvia, 2=Condividi, 3=Log, 4=Chiudi, Q=Esci) |
-| `AVVIA_TUTTO.bat` | Scorciatoia: avvia locale (equivale a premere "1") |
-| `AVVIA_LOCALE.bat` | Scorciatoia: avvia locale (identico ad AVVIA_TUTTO) |
-| `CHIUDI_TUTTO.bat` | Scorciatoia: chiudi tutti i processi |
-| `CONDIVIDI_ONLINE.bat` | Scorciatoia: tunnel Cloudflare |
+| 1 | Avvia locale (Vite su porta 3000, apre browser quando pronto) |
+| 2 | Condividi online (avvia locale + tunnel Cloudflare, apre link pubblico) |
+| 3 | Chiudi tutto (PID salvati + fallback per porta) |
+| 4 | Apri locale nel browser |
+| 5 | Apri link online nel browser |
+| 6 | Vedi log (scelta tra vite/cloudflared stdout/stderr) |
+| 7 | Ripara PostCSS (rimuove BOM da file config) |
+| Q | Esci |
 
-### PANNELLO.ps1 - note tecniche
+### File .bat e relazione con PANNELLO.ps1
 
-- **Nessun uso di `$pid`**: Lo script usa correttamente `$proc.Id`, `$st.front_pid`, `$st.tunnel_pid` (mai la variabile riservata `$pid`).
-- **Nessun operatore `??`**: Compatibile con Windows PowerShell 5.1.
-- **Funzioni self-contained**: Nessun dot-sourcing di file esterni. Tutto in un unico file.
-- **Gestione processi**: Salva PID in `_STATE.json`, chiude per PID e poi per porta come fallback. `KillByPort` filtra solo processi `node`, `cmd`, `cloudflared`.
-- **Cloudflare tunnel**: Richiede `cloudflared.exe` nel PATH. Legge URL dal log (stdout o stderr). Verifica raggiungibilita' HTTP prima di aprire il browser.
+| File | Parametro passato | Effetto |
+|---|---|---|
+| `PANNELLO.bat` | (nessuno) | Apre il menu interattivo |
+| `AVVIA_TUTTO.bat` | `-Azione AVVIA_LOCALE` | Avvia locale, poi mostra menu |
+| `AVVIA_LOCALE.bat` | `-Azione AVVIA_LOCALE` | Identico ad AVVIA_TUTTO |
+| `CHIUDI_TUTTO.bat` | `-Azione CHIUDI_TUTTO` | Chiude tutto, poi mostra menu |
+| `CONDIVIDI_ONLINE.bat` | `-Azione CONDIVIDI_ONLINE` | Condivide, poi mostra menu |
 
-### `vite.config.ts` - configurazione Cloudflare
+---
 
-`allowedHosts: ['.trycloudflare.com', 'localhost', '127.0.0.1']` permette a Vite di accettare richieste dal tunnel Cloudflare senza bloccarle.
+## vite.config.ts - configurazione chiave
+
+```typescript
+export default defineConfig({
+  plugins: [react()],
+  build: { outDir: 'build' },
+  server: {
+    port: 3000,
+    strictPort: true,
+    host: '0.0.0.0',
+    allowedHosts: ['.trycloudflare.com', 'localhost', '127.0.0.1'],
+    open: false
+  }
+})
+```
+
+- `allowedHosts`: permette Cloudflare tunnel senza "Blocked request"
+- `open: false`: evita doppia apertura schede (solo lo script apre il browser)
+- `strictPort: true`: fallisce se porta 3000 e' occupata (evita conflitti)
 
 ---
 
@@ -164,8 +181,7 @@ git clone <url> BianchiproRestyling
 cd BianchiproRestyling
 
 # 2. Installare Node 20 (se non presente)
-nvm install 20
-nvm use 20
+nvm install 20 && nvm use 20
 
 # 3. Installare dipendenze
 npm ci
