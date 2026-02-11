@@ -1,256 +1,367 @@
-param([string]$Action = "")
+param([string]$Azione = "MENU")
+
 $ErrorActionPreference = "Stop"
+$root    = Split-Path -Parent $MyInvocation.MyCommand.Path
+$state   = Join-Path $root "_STATE.json"
+$logDir  = Join-Path $root "_LOG"
+$urlFile = Join-Path $root "URL_ONLINE.txt"
 
-$ScriptDir  = Split-Path -Parent $MyInvocation.MyCommand.Path
-$Project    = "BIANCHI PRO"
-$FrontPort  = 3000
-$LocalUrl   = "http://127.0.0.1:$FrontPort/"
-$LogDir     = Join-Path $ScriptDir "_LOGS"
-$StateFile  = Join-Path $ScriptDir "_PANNELLO_STATE.json"
+if(-not (Test-Path $logDir)){ New-Item -ItemType Directory -Path $logDir | Out-Null }
 
-function Info([string]$m)  { Write-Host $m -ForegroundColor Cyan }
-function Ok([string]$m)    { Write-Host $m -ForegroundColor Green }
-function Warn([string]$m)  { Write-Host $m -ForegroundColor Yellow }
-function Err([string]$m)   { Write-Host $m -ForegroundColor Red }
-function Ensure-Dir([string]$p) { if(-not (Test-Path -LiteralPath $p)){ New-Item -ItemType Directory -Path $p -Force | Out-Null } }
-function ReadKeyChar() { $k = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown"); return $k.Character.ToString().ToUpper() }
-function PauseKey([string]$msg = "Premere un tasto...") { Write-Host ""; Write-Host $msg -ForegroundColor Yellow; [void]$Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown") }
-
-function TestTcpPort([int]$port, [int]$timeoutMs = 400) {
-  try {
-    $cl = New-Object System.Net.Sockets.TcpClient
-    $iar = $cl.BeginConnect("127.0.0.1", $port, $null, $null)
-    $ok  = $iar.AsyncWaitHandle.WaitOne($timeoutMs, $false)
-    if (-not $ok) { $cl.Close(); return $false }
-    $cl.EndConnect($iar) | Out-Null
-    $cl.Close()
-    return $true
-  } catch { return $false }
+function T([string]$m,[string]$c="Cyan"){
+  $ts=(Get-Date).ToString("HH:mm:ss")
+  Write-Host "[$ts] $m" -ForegroundColor $c
 }
 
-function WaitPort([int]$port, [int]$timeoutSec, [int]$processPid = 0) {
-  Write-Host ("Attendo porta " + $port + " (max " + $timeoutSec + "s) ") -ForegroundColor Cyan -NoNewline
-  $end = (Get-Date).AddSeconds($timeoutSec)
-  $elapsed = 0
-  while ((Get-Date) -lt $end) {
-    if ($processPid -gt 0) {
-      $proc = Get-Process -Id $processPid -ErrorAction SilentlyContinue
-      if (-not $proc) {
-        Write-Host ""
-        Err "Processo terminato! Controlla _LOGS\front_err.log"
-        return $false
-      }
-    }
-    if (TestTcpPort $port 400) {
-      Write-Host ""
-      Ok "Porta pronta!"
-      return $true
-    }
-    Start-Sleep -Milliseconds 1000
-    $elapsed++
-    if (($elapsed % 2) -eq 0) { Write-Host "." -NoNewline -ForegroundColor DarkYellow }
-  }
-  Write-Host ""
-  Err "Timeout raggiunto"
-  return $false
+function Save-State($obj){
+  $json = $obj | ConvertTo-Json -Depth 20
+  $enc  = New-Object System.Text.UTF8Encoding($false)
+  [System.IO.File]::WriteAllText($state, $json, $enc)
 }
 
-function LoadState() {
-  if (Test-Path -LiteralPath $StateFile) {
-    try { return (Get-Content -LiteralPath $StateFile -Raw | ConvertFrom-Json) } catch { return $null }
+function Load-State(){
+  if(Test-Path $state){
+    try { return (Get-Content $state -Raw | ConvertFrom-Json) } catch { return $null }
   }
   return $null
 }
-function SaveState($st) { ($st | ConvertTo-Json -Depth 6) | Set-Content -LiteralPath $StateFile -Encoding Ascii -Force }
-function NewState() { return [PSCustomObject]@{ front_pid = 0; tunnel_pid = 0; last_url = "" } }
 
-function KillTree([int]$procId) {
-  if ($procId -le 0) { return }
-  try { & taskkill /PID $procId /T /F 2>$null | Out-Null } catch {}
+function Kill-PidTree([int]$procId){
+  if($procId -le 0){ return }
+  cmd /c "taskkill /PID $procId /T /F >nul 2>&1" | Out-Null
 }
-function KillByPort([int]$port) {
-  try {
-    $cons = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
-    foreach ($co in $cons) {
-      $pr = Get-Process -Id $co.OwningProcess -ErrorAction SilentlyContinue
-      if ($pr) {
-        $nm = $pr.Name.ToLower()
-        if ($nm -in @("node","cmd","cloudflared")) { KillTree $pr.Id }
+
+function Get-PidsByPort([int]$port){
+  $pids = @{}
+  try{
+    $lines = netstat -ano | Select-String (":$port\s")
+    foreach($l in $lines){
+      $s = ($l.Line -replace "\s+"," ").Trim()
+      if($s -match "\sLISTENING\s(\d+)$"){
+        $id = [int]$matches[1]
+        $pids["$id"] = $true
       }
     }
   } catch {}
+  return @($pids.Keys | ForEach-Object { [int]$_ })
 }
 
-function StopAll() {
-  Info "CHIUSURA - $Project"
-  $st = LoadState
-  if ($st) { KillTree ([int]$st.tunnel_pid); KillTree ([int]$st.front_pid) }
-  KillByPort $FrontPort
-  if (Test-Path -LiteralPath $StateFile) { Remove-Item -LiteralPath $StateFile -Force -ErrorAction SilentlyContinue }
-  Ok "OK: chiuso."
+function Kill-ByPort([int]$port){
+  $ids = Get-PidsByPort $port
+  foreach($id in $ids){ Kill-PidTree $id }
 }
 
-function Start-Local { param([bool]$OpenBrowser = $true)
-  StopAll
-  Ensure-Dir $LogDir
-  $logOut = Join-Path $LogDir "front_out.log"
-  $logErr = Join-Path $LogDir "front_err.log"
-
-  Info "Avvio npm run dev..."
-  
-  # CRITICAL: Usa cmd.exe con redirect > per i log, NO -RedirectStandardOutput
-  $cmdLine = "cd /d `"$ScriptDir`" && npm run dev -- --host 127.0.0.1 --port $FrontPort > `"$logOut`" 2> `"$logErr`""
-  $proc = Start-Process -FilePath "cmd.exe" -ArgumentList "/c",$cmdLine -WorkingDirectory $ScriptDir -PassThru -WindowStyle Minimized
-
-  $st = NewState
-  $st.front_pid = $proc.Id
-  SaveState $st
-
-  if (-not (WaitPort $FrontPort 120 $proc.Id)) {
-    Err "Servizio non pronto. Controlla _LOGS\front_err.log"
-    return $false
-  }
-
-  Ok ("Locale pronto: " + $LocalUrl)
-  if ($OpenBrowser) {
-    Start-Sleep -Seconds 2
-    Start-Process $LocalUrl
-  }
-  return $true
-}
-
-function WaitCloudReady([string]$url, [int]$timeoutSec) {
-  Write-Host ("Verifico raggiungibilita tunnel ") -ForegroundColor Cyan -NoNewline
-  $end = (Get-Date).AddSeconds($timeoutSec)
-  $attempt = 0
-  while ((Get-Date) -lt $end) {
-    $attempt++
-    try {
-      $req = [System.Net.HttpWebRequest]::Create($url)
-      $req.Timeout = 5000
-      $req.AllowAutoRedirect = $true
-      $resp = $req.GetResponse()
-      $resp.Close()
-      Write-Host ""
-      Ok ("Tunnel raggiungibile dopo " + $attempt + " tentativi")
+function Wait-Http([string]$url,[int]$timeoutSec=180){
+  $start = Get-Date
+  while((Get-Date) - $start -lt [TimeSpan]::FromSeconds($timeoutSec)){
+    try{
+      Invoke-WebRequest -UseBasicParsing -TimeoutSec 2 -Uri $url | Out-Null
       return $true
-    } catch [System.Net.WebException] {
-      if ($_.Exception.Response -ne $null) {
-        Write-Host ""
-        Ok "Tunnel raggiungibile (HTTP error ma risponde)"
-        return $true
-      }
-      if ($attempt % 3 -eq 0) { Write-Host "." -NoNewline -ForegroundColor DarkYellow }
-      Start-Sleep -Milliseconds 2000
     } catch {
-      Start-Sleep -Milliseconds 2000
+      try{
+        # anche una risposta "errore" ma con server vivo va bene: es. 404/500
+        if($_.Exception.Response){ return $true }
+      } catch {}
     }
+    Start-Sleep -Milliseconds 400
   }
-  Write-Host ""
   return $false
 }
 
-function Share-Online {
-  if (-not (TestTcpPort $FrontPort 400)) {
-    Warn "Locale non attivo, avvio..."
-    if (-not (Start-Local $false)) { return $false }
+function Remove-BomIfPresent([string]$path){
+  if(-not (Test-Path $path)){ return $false }
+  $bytes = [System.IO.File]::ReadAllBytes($path)
+  if($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF){
+    $newBytes = $bytes[3..($bytes.Length-1)]
+    [System.IO.File]::WriteAllBytes($path, $newBytes)
+    return $true
   }
+  return $false
+}
 
-  $cloud = Get-Command "cloudflared.exe" -ErrorAction SilentlyContinue
-  if (-not $cloud) { Err "cloudflared.exe non trovato nel PATH"; return $false }
-
-  $st = LoadState
-  if (-not $st) { $st = NewState }
-  if ([int]$st.tunnel_pid -gt 0) { KillTree ([int]$st.tunnel_pid) }
-
-  $logOut = Join-Path $LogDir "tunnel_out.log"
-  $logErr = Join-Path $LogDir "tunnel_err.log"
-
-  Info "Avvio tunnel Cloudflare..."
-  $cmdLine = "cloudflared tunnel --url http://127.0.0.1:$FrontPort --no-autoupdate > `"$logOut`" 2> `"$logErr`""
-  $tp = Start-Process -FilePath "cmd.exe" -ArgumentList "/c",$cmdLine -WorkingDirectory $ScriptDir -PassThru -WindowStyle Minimized
-
-  $st.tunnel_pid = $tp.Id
-  SaveState $st
-
-  Info "Attendo URL pubblico (max 60s)..."
-  $url = ""
-  $attempts = 0
-  while ($attempts -lt 60 -and $url -eq "") {
-    Start-Sleep -Milliseconds 1000
-    $attempts++
-    if ($attempts % 3 -eq 0) { Write-Host "." -NoNewline -ForegroundColor DarkYellow }
-    
-    if (Test-Path -LiteralPath $logOut) {
-      $logContent = Get-Content -LiteralPath $logOut -Raw -ErrorAction SilentlyContinue
-      if ($logContent -match 'https://[a-z0-9-]+\.trycloudflare\.com') {
-        $url = $Matches[0]
-      }
-    }
-    if (Test-Path -LiteralPath $logErr) {
-      $logContent = Get-Content -LiteralPath $logErr -Raw -ErrorAction SilentlyContinue
-      if ($logContent -match 'https://[a-z0-9-]+\.trycloudflare\.com') {
-        $url = $Matches[0]
+function Fix-PostCss(){
+  # Vite cerca PostCSS config anche in JSON: se c'è BOM -> JSON.parse esplode con "Unexpected token '﻿'"
+  $candidates = @(
+    (Join-Path $root "postcss.config.json"),
+    (Join-Path $root ".postcssrc"),
+    (Join-Path $root ".postcssrc.json"),
+    (Join-Path $root ".postcssrcc"),
+    (Join-Path $root ".postcssrc.jsonc")
+  )
+  $fixedAny = $false
+  foreach($p in $candidates){
+    if(Test-Path $p){
+      if(Remove-BomIfPresent $p){
+        $fixedAny = $true
+        T "Riparato BOM nel file PostCSS: $([System.IO.Path]::GetFileName($p))" "Green"
       }
     }
   }
-  Write-Host ""
-
-  if ($url -eq "") {
-    Err "URL non trovato nel log. Controlla _LOGS\tunnel_err.log"
-    return $false
-  }
-
-  Info ("URL trovato: " + $url)
-  
-  # Aspetta che il tunnel risponda davvero
-  if (-not (WaitCloudReady $url 90)) {
-    Warn "Timeout verifica. Apro comunque, potrebbe servire un refresh."
-  }
-
-  $st.last_url = $url
-  SaveState $st
-  
-  Ok ("Online pronto: " + $url)
-  Start-Process $url
-  return $true
+  return $fixedAny
 }
 
-function Open-Logs { Ensure-Dir $LogDir; Start-Process "explorer.exe" $LogDir }
+function Stop-All(){
+  T "Chiusura totale (BianchiPro)..." "Yellow"
 
-function Title {
-  Clear-Host
-  Write-Host "==========================================" -ForegroundColor DarkCyan
-  Write-Host ("  PANNELLO - " + $Project) -ForegroundColor Cyan
-  Write-Host "==========================================" -ForegroundColor DarkCyan
-  Write-Host ""
+  $s = Load-State
+  if($s){
+    if($s.vite){ Kill-PidTree ([int]$s.vite) }
+    if($s.cloudflared){ Kill-PidTree ([int]$s.cloudflared) }
+  }
+
+  # sicurezza: ammazza qualsiasi cosa stia ancora in ascolto sulla porta 3000
+  Kill-ByPort 3000
+
+  Remove-Item $state -Force -ErrorAction SilentlyContinue | Out-Null
+  T "Tutto chiuso." "Green"
 }
 
-function Menu {
-  while ($true) {
-    Title
-    Write-Host "  [1] Avvia locale" -ForegroundColor Green
-    Write-Host "  [2] Condividi online (Cloudflare)" -ForegroundColor Yellow
-    Write-Host "  [3] Apri log" -ForegroundColor Cyan
-    Write-Host "  [4] Chiudi tutto" -ForegroundColor Red
-    Write-Host "  [Q] Esci" -ForegroundColor Gray
-    Write-Host ""
-    Write-Host "  Premi un tasto..." -ForegroundColor DarkYellow
-    $k = ReadKeyChar
-    switch ($k) {
-      "1" { Start-Local $true  | Out-Null; PauseKey }
-      "2" { Share-Online       | Out-Null; PauseKey }
-      "3" { Open-Logs;                     PauseKey }
-      "4" { StopAll;                       PauseKey }
-      "Q" { return }
+function Ensure-NpmInstall(){
+  if(-not (Test-Path (Join-Path $root "package.json"))){
+    throw "In $root non trovo package.json: non sembra un progetto Node/Vite."
+  }
+  if(-not (Test-Path (Join-Path $root "node_modules"))){
+    T "Manca node_modules: avvio installazione dipendenze (npm install)..." "Yellow"
+    $o = Join-Path $logDir "npm_install_out.log"
+    $e = Join-Path $logDir "npm_install_err.log"
+    Remove-Item $o,$e -Force -ErrorAction SilentlyContinue | Out-Null
+
+    $p = Start-Process -FilePath "cmd.exe" -WorkingDirectory $root -PassThru -WindowStyle Hidden `
+      -ArgumentList "/c","npm install" -RedirectStandardOutput $o -RedirectStandardError $e
+
+    $p.WaitForExit()
+    if($p.ExitCode -ne 0){
+      T "ERRORE npm install. Apri il log: $e" "Red"
+      throw "npm install fallito"
+    }
+    T "npm install completato." "Green"
+  }
+}
+
+function Start-Local([switch]$NonAprireBrowser){
+  Stop-All
+
+  T "Riparazione PostCSS (se serve)..." "DarkCyan"
+  Fix-PostCss | Out-Null
+
+  Ensure-NpmInstall
+
+  $port = 3000
+  $base = "http://127.0.0.1:$port"
+
+  $out = Join-Path $logDir "vite_out.log"
+  $err = Join-Path $logDir "vite_err.log"
+  Remove-Item $out,$err -Force -ErrorAction SilentlyContinue | Out-Null
+
+  # Permettere host trycloudflare per eventuale tunnel rapido
+  $env:__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS = ".trycloudflare.com"
+
+  T "Avvio locale su $base" "Cyan"
+  $pVite = Start-Process -FilePath "cmd.exe" -WorkingDirectory $root -PassThru -WindowStyle Hidden `
+    -ArgumentList "/c","npx vite --host 127.0.0.1 --port $port" `
+    -RedirectStandardOutput $out -RedirectStandardError $err
+
+  Save-State @{ vite = $pVite.Id; cloudflared = 0; port = $port }
+
+  T "Attendere avvio server..." "DarkCyan"
+  if(-not (Wait-Http $base 180)){
+    T "ERRORE: non risponde $base" "Red"
+    T "Apri log con menu -> 5" "Yellow"
+    throw "Vite non risponde"
+  }
+
+  # Se PostCSS era rotto, Vite può risultare su ma pagina bianca con overlay: lo vedi nel browser e nel log
+  T "PRONTO (locale): $base" "Green"
+  if(-not $NonAprireBrowser){ Start-Process $base | Out-Null }
+}
+
+function Get-CloudflaredPath(){
+  $cmd = Get-Command cloudflared -ErrorAction SilentlyContinue
+  if($cmd){ return $cmd.Source }
+
+  $p1 = Join-Path $env:ProgramFiles "Cloudflare\Cloudflared\cloudflared.exe"
+  $p2 = Join-Path ${env:ProgramFiles(x86)} "Cloudflare\Cloudflared\cloudflared.exe"
+  if(Test-Path $p1){ return $p1 }
+  if(Test-Path $p2){ return $p2 }
+
+  throw "cloudflared non trovato. Installare Cloudflare Tunnel."
+}
+
+function Share-Online(){
+  Start-Local -NonAprireBrowser
+
+  $s = Load-State
+  $port = 3000
+  if($s -and $s.port){ $port = [int]$s.port }
+  $base = "http://127.0.0.1:$port"
+
+  # Quick Tunnel Cloudflare (trycloudflare) crea un sottodominio random su trycloudflare.com :contentReference[oaicite:1]{index=1}
+  $cf = Get-CloudflaredPath
+
+  $out = Join-Path $logDir "cloudflared_out.log"
+  $err = Join-Path $logDir "cloudflared_err.log"
+  Remove-Item $out,$err -Force -ErrorAction SilentlyContinue | Out-Null
+
+  # Se esiste config cloudflared che blocca i quick tunnel, la mettiamo temporaneamente da parte
+  $cfDir = Join-Path $env:USERPROFILE ".cloudflared"
+  $bak = @()
+  try{
+    foreach($name in @("config.yml","config.yaml")){
+      $p = Join-Path $cfDir $name
+      if(Test-Path $p){
+        $b = "$p.bak_" + (Get-Date).ToString("yyyyMMdd_HHmmss")
+        Move-Item $p $b -Force
+        $bak += @(@($p,$b))
+      }
+    }
+
+    T "Avvio link pubblico (Cloudflare) verso $base" "Cyan"
+    $pTun = Start-Process -FilePath $cf -WorkingDirectory $root -PassThru -WindowStyle Hidden `
+      -ArgumentList @("tunnel","--url",$base) `
+      -RedirectStandardOutput $out -RedirectStandardError $err
+
+    Save-State @{ vite = (Load-State).vite; cloudflared = $pTun.Id; port = $port }
+
+    $pattern = 'https://[^\s"]+\.trycloudflare\.com'
+    $pub = $null
+    $start = Get-Date
+    while(-not $pub -and ((Get-Date)-$start).TotalSeconds -lt 120){
+      $txt = ""
+      if(Test-Path $out){ $txt += (Get-Content $out -Raw) }
+      if(Test-Path $err){ $txt += "`n" + (Get-Content $err -Raw) }
+      if($txt -match $pattern){ $pub = $matches[0] }
+      Start-Sleep -Milliseconds 400
+    }
+    if(-not $pub){
+      T "ERRORE: non trovo il link pubblico. Vedi log cloudflared." "Red"
+      throw "Link pubblico non trovato"
+    }
+
+    $enc = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($urlFile, $pub, $enc)
+
+    T "PRONTO (online): $pub" "Green"
+    T "Link salvato in: $urlFile" "DarkGreen"
+
+    # aspetta che risponda, poi apri
+    [void](Wait-Http $pub 120)
+    Start-Process $pub | Out-Null
+
+  } finally {
+    foreach($pair in $bak){
+      $orig = $pair[0]; $backup = $pair[1]
+      if(Test-Path $backup){ Move-Item $backup $orig -Force }
     }
   }
 }
 
-switch ($Action) {
-  "start" { Start-Local $true  | Out-Null; PauseKey }
-  "share" { Share-Online       | Out-Null; PauseKey }
-  "stop"  { StopAll;                       PauseKey }
-  "logs"  { Open-Logs;                     PauseKey }
-  default { Menu }
+function Open-Local(){
+  $port = 3000
+  $s = Load-State
+  if($s -and $s.port){ $port = [int]$s.port }
+  Start-Process "http://127.0.0.1:$port" | Out-Null
 }
+
+function Open-Online(){
+  if(Test-Path $urlFile){
+    $u = (Get-Content $urlFile -Raw).Trim()
+    if($u){ Start-Process $u | Out-Null; return }
+  }
+  T "Non trovo URL_ONLINE.txt (prima fare 'Condividi online')." "Yellow"
+}
+
+function Tail-Log(){
+  T "Scegli log: 1=Vite OUT | 2=Vite ERR | 3=Cloudflared OUT | 4=Cloudflared ERR" "Yellow"
+  $c = Read-Host "Scelta"
+  if($c -eq $null){ $c = "" }
+  $c = $c.Trim()
+
+  $map = @{
+    "1" = (Join-Path $logDir "vite_out.log")
+    "2" = (Join-Path $logDir "vite_err.log")
+    "3" = (Join-Path $logDir "cloudflared_out.log")
+    "4" = (Join-Path $logDir "cloudflared_err.log")
+  }
+
+  if(-not $map.ContainsKey($c)){
+    T "Scelta non valida." "Yellow"
+    return
+  }
+
+  $p = $map[$c]
+  if(-not (Test-Path $p)){
+    T "Log non trovato: $p" "Yellow"
+    return
+  }
+
+  T "Apro log (Ctrl+C per tornare al menu)..." "Cyan"
+  Get-Content -Path $p -Tail 200 -Wait
+}
+
+function Show-Status(){
+  $s = Load-State
+  $port = 3000
+  if($s -and $s.port){ $port = [int]$s.port }
+
+  Write-Host ""
+  Write-Host "==============================" -ForegroundColor Yellow
+  Write-Host "BIANCHIPRO - PANNELLO" -ForegroundColor Yellow
+  Write-Host "Cartella: $root" -ForegroundColor DarkGray
+  Write-Host "Locale : http://127.0.0.1:$port" -ForegroundColor Cyan
+
+  if(Test-Path $urlFile){
+    $u = (Get-Content $urlFile -Raw).Trim()
+    if($u){ Write-Host "Online : $u" -ForegroundColor Green }
+  } else {
+    Write-Host "Online : (non attivo)" -ForegroundColor DarkGray
+  }
+
+  if($s){
+    $v = $s.vite
+    $t = $s.cloudflared
+    Write-Host "PID Vite      : $v" -ForegroundColor DarkGray
+    Write-Host "PID Cloudflared: $t" -ForegroundColor DarkGray
+  } else {
+    Write-Host "Stato: (nessuno)" -ForegroundColor DarkGray
+  }
+  Write-Host "==============================" -ForegroundColor Yellow
+  Write-Host ""
+  Write-Host "1 = Avvia locale" -ForegroundColor Yellow
+  Write-Host "2 = Condividi online (link pubblico)" -ForegroundColor Yellow
+  Write-Host "3 = Chiudi tutto" -ForegroundColor Yellow
+  Write-Host "4 = Apri locale nel browser" -ForegroundColor Yellow
+  Write-Host "5 = Vedi log" -ForegroundColor Yellow
+  Write-Host "6 = Ripara PostCSS (BOM)" -ForegroundColor Yellow
+  Write-Host "Q = Esci" -ForegroundColor Yellow
+  Write-Host ""
+}
+
+function Menu(){
+  while($true){
+    Show-Status
+    $k = Read-Host "Scelta"
+    if($k -eq $null){ $k = "" }
+    $k = $k.Trim().ToUpper()
+
+    if($k -eq "1"){ Start-Local; continue }
+    if($k -eq "2"){ Share-Online; continue }
+    if($k -eq "3"){ Stop-All; continue }
+    if($k -eq "4"){ Open-Local; continue }
+    if($k -eq "5"){ Tail-Log; continue }
+    if($k -eq "6"){ Fix-PostCss | Out-Null; Read-Host "Invio per continuare" | Out-Null; continue }
+    if($k -eq "Q"){ break }
+
+    T "Scelta non valida." "Yellow"
+  }
+}
+
+# Azione diretta da .bat
+$act = $Azione
+if($act -eq $null){ $act = "MENU" }
+$act = $act.Trim().ToUpper()
+
+if($act -eq "AVVIA_LOCALE"){ Start-Local; Menu; exit }
+if($act -eq "CONDIVIDI_ONLINE"){ Share-Online; Menu; exit }
+if($act -eq "CHIUDI_TUTTO"){ Stop-All; Menu; exit }
+
+Menu
