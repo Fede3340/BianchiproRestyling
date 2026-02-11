@@ -1,147 +1,220 @@
 # Technical Handover - BianchiPro Restyling
 
-Data: 2026-02-10
+Data: 2026-02-11 (secondo passaggio - audit completo)
 
 ## Panoramica progetto
 
 Progetto frontend **React 18 + Vite 6 + TypeScript** con deploy su **Netlify**.
 Backend serverless tramite Netlify Functions (`netlify/functions/`).
 Pagamenti via Stripe (chiavi in variabili d'ambiente Netlify).
+Backend secondario: Supabase Edge Functions (Deno) in `src/supabase/functions/server/`.
 
 ### Stack
 
 - React 18, Vite 6.3.5, TypeScript
-- UI: Radix UI, Tailwind CSS, shadcn/ui, Lucide icons
+- UI: Radix UI, Tailwind CSS (v4), shadcn/ui, Lucide icons
 - Pagamenti: Stripe (react-stripe-js, stripe-js)
-- Deploy: Netlify (con Functions)
-- CI: GitHub Actions (`ci-build.yml`)
+- Database/KV: Supabase (Edge Functions Deno)
+- Deploy: Netlify (con Functions serverless)
+- CI: GitHub Actions (`ci-build.yml` - Node 20)
 
-### Struttura cartelle principali
+### Struttura cartelle
 
 ```
 BianchiproRestyling/
-  .github/workflows/ci-build.yml   # CI: npm ci && npm run build (Node 20)
-  netlify/functions/                # Backend serverless (preventivo, orders, payment-intent)
-  scripts/check-conflicts.mjs      # Pre-build: verifica assenza merge conflict markers
+  .github/workflows/ci-build.yml    # CI: npm ci && npm run build (Node 20)
+  netlify/functions/                 # Backend serverless Netlify
+    preventivo.js                    #   Calcolo preventivo con IVA
+    orders.js                        #   Gestione ordini
+    create-payment-intent.js         #   Stripe Payment Intent
+  scripts/check-conflicts.mjs       # Pre-build: verifica merge conflict markers
   src/
-    App.tsx                         # Entry component
-    main.tsx                        # React root mount
-    components/                     # Componenti applicativi
-    components/ui/                  # shadcn/ui components
-    components/figma/               # ImageWithFallback helper
-    assets/                         # Immagini statiche
-    config/                         # Configurazione app
-    styles/                         # Stili aggiuntivi
-    utils/supabase/                 # Supabase client info
-  vite.config.ts                    # Configurazione Vite
-  postcss.config.cjs                # PostCSS (Tailwind/autoprefixer)
-  netlify.toml                      # Deploy config Netlify
-  PANNELLO.ps1                      # Script automazione avvio/condivisione (Windows)
-  PANNELLO.bat                      # Launcher per PANNELLO.ps1
-  AVVIA_TUTTO.bat / AVVIA_LOCALE.bat / CHIUDI_TUTTO.bat / CONDIVIDI_ONLINE.bat
-  _LOGS/                            # Log di runtime (frontend, tunnel)
-  _STATE.json                       # Stato processi avviati (PID)
+    main.tsx                         # Entry point React
+    App.tsx                          # Root component
+    index.css                        # Stili globali (Tailwind generato, 67KB)
+    assets/                          # Immagini (1 file PNG prodotto)
+    components/                      # 15 componenti applicativi
+      figma/ImageWithFallback.tsx    #   Fallback per immagini mancanti
+      ui/                            #   62 componenti shadcn/ui
+        utils.ts                     #   cn() utility (clsx + tailwind-merge)
+    config/stripe.ts                 # Config Stripe (publishable key)
+    styles/globals.css               # CSS custom properties light/dark
+    utils/supabase/info.tsx          # Supabase project ID e anon key
+    supabase/functions/server/       # Edge Functions Deno (NON Vite)
+      index.tsx                      #   API Hono (ordini, pagamenti, supporto)
+      kv_store.tsx                   #   KV store via Supabase
+  vite.config.ts                     # Config Vite (react-swc, porta 3000)
+  tsconfig.json                      # TypeScript config
+  postcss.config.cjs                 # PostCSS (Tailwind/autoprefixer auto-detect)
+  netlify.toml                       # Deploy config (build -> build/, Node 20)
+  PANNELLO.ps1                       # Pannello automazione Windows
+  PANNELLO.bat                       # Launcher menu interattivo
+  AVVIA_TUTTO.bat / AVVIA_LOCALE.bat # Scorciatoia: avvia locale
+  CHIUDI_TUTTO.bat                   # Scorciatoia: chiudi tutto
+  CONDIVIDI_ONLINE.bat               # Scorciatoia: tunnel Cloudflare
+  _LOGS/                             # Log runtime (frontend, tunnel)
+  _STATE.json                        # PID processi avviati
 ```
 
 ---
 
-## Bug trovati e corretti
+## Bug trovati e corretti (totale: 10)
 
 ### 1. vite.config.ts importava `@vitejs/plugin-vue` (progetto React)
 
-**File**: `vite.config.ts`
-**Problema**: Il file importava `@vitejs/plugin-vue` ma il progetto usa React (`.tsx`, `react-dom`, `createRoot`). L'unico plugin installato in `node_modules` e' `@vitejs/plugin-react-swc`. Vite non poteva partire.
-**Fix**: Cambiato import e plugin a `@vitejs/plugin-react-swc`.
+**Problema**: Plugin sbagliato. Il progetto e' React ma il config importava Vue.
+L'unico plugin in node_modules e' `@vitejs/plugin-react-swc`.
+**Fix**: Cambiato a `import react from '@vitejs/plugin-react-swc'`.
 
 ### 2. vite.config.ts aveva BOM (Byte Order Mark)
 
-**File**: `vite.config.ts`
-**Problema**: Il file iniziava con `EF BB BF` (UTF-8 BOM). Alcuni tool trattano il BOM come carattere invalido.
-**Fix**: File riscritto senza BOM.
+**Problema**: Primi 3 byte `EF BB BF`. Puo' causare errori di parsing.
+**Fix**: Riscritto senza BOM.
 
-### 3. build.outDir non corrispondeva a netlify.toml
+### 3. build.outDir mancante (mismatch con netlify.toml)
 
-**File**: `vite.config.ts`, `netlify.toml`
-**Problema**: `netlify.toml` dichiara `publish = "build"` ma Vite di default produce output in `dist/`. La build su Netlify non troverebbe i file.
-**Fix**: Aggiunto `build: { outDir: 'build' }` in `vite.config.ts`.
+**Problema**: `netlify.toml` dice `publish = "build"` ma Vite default e' `dist/`.
+**Fix**: Aggiunto `build: { outDir: 'build' }`.
 
-### 4. ~70 import con versione nel modulo specifier (`"package@X.Y.Z"`)
+### 4. ~70 import con `@version` nel modulo specifier
 
-**File**: Tutti i file in `src/components/ui/`, piu' `src/App.tsx`, `src/components/CartDrawer.tsx`, `src/components/ProductTabs.tsx`
-**Problema**: Gli import usavano specifier come `"sonner@2.0.3"`, `"lucide-react@0.487.0"`, `"@radix-ui/react-dialog@1.1.6"`, ecc. Questi non sono moduli validi in Node/npm - la versione va in `package.json`, non nell'import. Probabilmente generati da uno strumento di code generation (Figma o simile) che include i numeri di versione.
-**Fix**: Rimosso il suffisso `@X.Y.Z` da tutti gli import. Esempio: `"sonner@2.0.3"` diventa `"sonner"`.
-**File coinvolti**: 47 file in `src/components/ui/` + 4 file in `src/` e `src/components/`.
+**Problema**: Import come `"sonner@2.0.3"`, `"lucide-react@0.487.0"`,
+`"@radix-ui/react-dialog@1.1.6"`. Generati da Figma Make.
+Non sono specifier validi in Node - la build fallisce.
+**File coinvolti**: 47 file `ui/` + `App.tsx`, `CartDrawer.tsx`, `ProductTabs.tsx`,
+`ui/sonner.tsx` (che aveva anche `"next-themes@0.4.6"`).
+**Fix**: Rimosso `@X.Y.Z` da tutti gli import.
 
 ### 5. Import `figma:asset/...` non risolvibile
 
-**File**: `src/App.tsx`, `src/components/ProductGallery.tsx`
-**Problema**: Usavano `import mainImage from "figma:asset/f4ed0b..."`. Il protocollo `figma:asset` non e' gestito da Vite (nessun plugin custom). Il file PNG esiste in `src/assets/`.
-**Fix**: Cambiato a path relativo: `"./assets/f4ed0b..."` e `"../assets/f4ed0b..."`.
+**Problema**: `App.tsx` e `ProductGallery.tsx` usavano `"figma:asset/f4ed0b..."`.
+Nessun plugin Vite gestisce questo protocollo.
+Il file PNG esiste in `src/assets/`.
+**Fix**: Cambiato a path relativo (`./assets/...`, `../assets/...`).
 
 ### 6. `_STATE.json` con BOM e struttura incompatibile
 
-**File**: `_STATE.json`
-**Problema**: Il file aveva BOM e usava campi `frontend`, `cloudflared`, `base`, `port`. Ma `PANNELLO.ps1` (funzione `NewState`) crea e legge campi `front_pid`, `tunnel_pid`, `last_url`. La funzione `StopAll` cercava `$st.front_pid` che non esisteva nel vecchio formato.
-**Fix**: Riscritto con struttura corretta `{"front_pid":0,"tunnel_pid":0,"last_url":""}` senza BOM.
+**Problema**: BOM + campi `frontend`, `cloudflared`, `base`, `port` (vecchio formato).
+`PANNELLO.ps1` aspetta `front_pid`, `tunnel_pid`, `last_url`.
+**Fix**: Riscritto con struttura corretta senza BOM.
 
-### 7. `AVVIA_TUTTO.bat` passava parametro sbagliato a PANNELLO.ps1
+### 7. `AVVIA_TUTTO.bat` parametro sbagliato
 
-**File**: `AVVIA_TUTTO.bat`
-**Problema**: Passava `-Azione AVVIA_LOCALE` ma `PANNELLO.ps1` dichiara `param([string]$Action = "")` e il suo `switch` accetta i valori `start`, `share`, `stop`, `logs`. Il parametro `-Azione` non esiste e `AVVIA_LOCALE` non e' un valore valido.
-**Fix**: Cambiato a `PANNELLO.ps1 start` (come fanno gli altri .bat).
+**Problema**: Passava `-Azione AVVIA_LOCALE`. PANNELLO.ps1 accetta `start`/`share`/`stop`/`logs`.
+**Fix**: Cambiato a `PANNELLO.ps1 start`.
 
 ### 8. `PANNELLO.ps1` passava `--open false` a Vite
 
-**File**: `PANNELLO.ps1` riga 102
-**Problema**: Il comando `npm run dev -- --host 127.0.0.1 --port $FrontPort --open false` e' problematico. Vite tratta `--open` come flag booleano; `--open false` puo' essere interpretato come "apri la pagina 'false'". Inoltre `vite.config.ts` ha gia' `open: false`, rendendo il flag ridondante.
-**Fix**: Rimosso `--open false` dal comando.
+**Problema**: `--open false` puo' aprire una pagina "false". Config ha gia' `open: false`.
+**Fix**: Rimosso dal comando npm.
+
+### 9. `tsconfig.json` mancante
+
+**Problema**: Nessun tsconfig.json nel progetto. IDE TypeScript senza configurazione.
+**Fix**: Creato tsconfig.json con target ES2020, jsx react-jsx, strict mode.
+`src/supabase/` escluso (e' codice Deno, non Vite).
+
+### 10. PANNELLO.ps1 ricostruito da zero
+
+**Problemi nel vecchio**: `$ErrorActionPreference = "Stop"` (crash su ogni errore),
+state file path inconsistente (`_PANNELLO_STATE.json` vs `_STATE.json`),
+nessuna verifica npm nel PATH, nessun cleanup log prima di avvio,
+nessuna gestione config cloudflared che interferisce con quick tunnel,
+nessun feedback errore (mostra log), nessun indicatore stato nel menu.
+**Fix**: Riscritto completamente con:
+- `$ErrorActionPreference = "Continue"` (robusto)
+- State file unificato `_STATE.json`
+- Verifica npm nel PATH prima di avviare
+- Cleanup log vecchi prima di ogni avvio
+- Rinomina temporanea config cloudflared durante quick tunnel
+- Mostra ultime 5 righe del log errore quando fallisce
+- Indicatore stato in tempo reale nel menu (locale attivo/spento, URL tunnel)
+- Protezione PID <= 4 (mai toccare processi di sistema)
+- `KillByPort` include anche `npm` e `conhost` nei processi ammessi
+- Uscita con Q chiude anche i processi (cleanup automatico)
 
 ---
 
-## Problemi noti NON corretti (da affrontare)
+## Build verificata
 
-### A. Node versione utente fuori dal range supportato
+```
+npm run build  ->  OK (1628 moduli, 5.99s)
 
-I log mostrano che l'utente usa Node v24.13.0 ma `engines` in `package.json` richiede `>=20 <23` e `.nvmrc` dice `20`. La build CI usa Node 20 (corretto). Sul PC dell'utente npm mostra warning `EBADENGINE`. Potrebbe causare comportamenti imprevisti in sviluppo locale.
-**Azione**: L'utente dovrebbe installare Node 20 LTS tramite nvm (`nvm install 20 && nvm use 20`).
-
-### B. Log `front_err.log`: "vite non e' riconosciuto"
-
-Il log `_LOGS/front_err.log` mostra che in una sessione precedente `vite` non era nel PATH. Questo succede quando `PANNELLO.ps1` lancia `cmd.exe /c "cd ... && npm run dev ..."` ma l'ambiente cmd.exe non ha Node/npm nel PATH. Il PANNELLO.ps1 attuale usa `npm run dev` (non `vite` direttamente), il che dovrebbe funzionare se npm e' nel PATH globale. Se il problema si ripresenta, verificare che Node sia installato globalmente o che nvm sia configurato per cmd.exe.
-
-### C. Doppia apertura schede browser
-
-Il report precedente segnalava che a volte si aprono due schede: una dallo script e una dal server Vite. Ora `vite.config.ts` ha `open: false` e il PANNELLO.ps1 non passa piu' `--open`, quindi l'unica apertura dovrebbe essere quella controllata dallo script (dopo `WaitPort`). Se il problema persiste, verificare che non ci siano altri file di configurazione Vite o variabili d'ambiente che forzano `open`.
-
-### D. Tailwind CSS / PostCSS configurazione
-
-`postcss.config.cjs` fa auto-detect di `@tailwindcss/postcss` o `tailwindcss`. Non c'e' un file `tailwind.config.*` nella root. Tailwind dovrebbe funzionare tramite le direttive CSS in `src/index.css`. Se la build fallisce su stili mancanti, verificare la versione di Tailwind installata e se serve un file di configurazione esplicito.
+Output:
+  build/index.html              0.44 KB
+  build/assets/*.png          154.42 KB
+  build/assets/*.css           54.37 KB (gzip 9.45 KB)
+  build/assets/*.js           288.86 KB (gzip 85.15 KB)
+```
 
 ---
 
-## Script di automazione Windows - stato attuale
+## Componenti verificati (audit completo)
+
+### 15 componenti applicativi
+AccessoriesSection, AppErrorBoundary, BackendStatus, CartDrawer,
+CheckoutModal, CompactAccessories, FavoritesDrawer, FeedatyReviews,
+Footer, Header, ProductDetails, ProductGallery, ProductTabs,
+ShippingCalculator, TrustBadges + figma/ImageWithFallback
+
+### 62 componenti UI (shadcn/ui)
+Tutti verificati: import corretti, cross-reference interni funzionanti.
+Contengono `"use client"` (direttiva Next.js, innocua in Vite - ignorata silenziosamente).
+
+### Dipendenze esterne
+Tutte presenti in node_modules: react, react-dom, lucide-react, sonner,
+next-themes, @stripe/*, @radix-ui/* (29 pacchetti), class-variance-authority,
+clsx, tailwind-merge, cmdk, vaul, embla-carousel-react, input-otp,
+react-day-picker, react-hook-form, react-resizable-panels, recharts.
+
+### Import inter-componente
+Tutti risolti correttamente. Nessun import circolare rilevato.
+
+---
+
+## File Deno (NON Vite) - `src/supabase/functions/server/`
+
+Questi file usano sintassi Deno (`jsr:`, `npm:`, `Deno.env`, `Deno.serve`).
+Sono Edge Functions che girano su Supabase, NON nel browser.
+**Non vanno modificati** e sono esclusi da tsconfig.json.
+
+- `index.tsx`: API Hono con endpoint ordini, supporto, Stripe payment intent
+- `kv_store.tsx`: KV store tramite Supabase (auto-generato)
+
+---
+
+## Script automazione Windows
 
 ### File e ruoli
 
-| File | Funzione |
-|---|---|
-| `PANNELLO.bat` | Menu interattivo (1=Avvia, 2=Condividi, 3=Log, 4=Chiudi, Q=Esci) |
-| `AVVIA_TUTTO.bat` | Scorciatoia: avvia locale (equivale a premere "1") |
-| `AVVIA_LOCALE.bat` | Scorciatoia: avvia locale (identico ad AVVIA_TUTTO) |
-| `CHIUDI_TUTTO.bat` | Scorciatoia: chiudi tutti i processi |
-| `CONDIVIDI_ONLINE.bat` | Scorciatoia: tunnel Cloudflare |
+| File | Azione | Equivalente menu |
+|---|---|---|
+| `PANNELLO.bat` | Menu interattivo | - |
+| `AVVIA_TUTTO.bat` | Avvia locale | Tasto 1 |
+| `AVVIA_LOCALE.bat` | Avvia locale | Tasto 1 |
+| `CHIUDI_TUTTO.bat` | Chiudi tutto | Tasto 4 |
+| `CONDIVIDI_ONLINE.bat` | Tunnel Cloudflare | Tasto 2 |
 
-### PANNELLO.ps1 - note tecniche
+### PANNELLO.ps1 - garanzie
 
-- **Nessun uso di `$pid`**: Lo script usa correttamente `$proc.Id`, `$st.front_pid`, `$st.tunnel_pid` (mai la variabile riservata `$pid`).
-- **Nessun operatore `??`**: Compatibile con Windows PowerShell 5.1.
-- **Funzioni self-contained**: Nessun dot-sourcing di file esterni. Tutto in un unico file.
-- **Gestione processi**: Salva PID in `_STATE.json`, chiude per PID e poi per porta come fallback. `KillByPort` filtra solo processi `node`, `cmd`, `cloudflared`.
-- **Cloudflare tunnel**: Richiede `cloudflared.exe` nel PATH. Legge URL dal log (stdout o stderr). Verifica raggiungibilita' HTTP prima di aprire il browser.
+- Compatibile Windows PowerShell 5.1 (no `??`, no `&&`, no `$pid` come variabile)
+- Self-contained: nessun file esterno, nessun dot-sourcing
+- Protezione PID di sistema: mai tocca PID <= 4
+- Cleanup log prima di ogni avvio (evita URL tunnel stale)
+- Verifica npm nel PATH con messaggio chiaro se manca
+- Browser si apre SOLO dopo risposta porta (o tunnel raggiungibile)
+- Una sola scheda (Vite `open: false` + script controlla apertura)
+- Menu mostra stato: locale attivo/spento, URL tunnel corrente
+- Uscita Q chiude tutto automaticamente
 
-### `vite.config.ts` - configurazione Cloudflare
+### Cloudflare tunnel
 
-`allowedHosts: ['.trycloudflare.com', 'localhost', '127.0.0.1']` permette a Vite di accettare richieste dal tunnel Cloudflare senza bloccarle.
+- Richiede `cloudflared.exe` nel PATH
+- `allowedHosts` in vite.config.ts include `.trycloudflare.com`
+- Config cloudflared locale (`.cloudflared/config.yml`) rinominata temporaneamente
+  durante quick tunnel per evitare interferenze
+- URL letto da log stderr/stdout con regex
+- Verifica HTTP prima di aprire browser
 
 ---
 
@@ -159,39 +232,48 @@ Il report precedente segnalava che a volte si aprono due schede: una dallo scrip
 ## Come avviare da zero
 
 ```bash
-# 1. Clonare il repo
-git clone <url> BianchiproRestyling
-cd BianchiproRestyling
-
-# 2. Installare Node 20 (se non presente)
-nvm install 20
-nvm use 20
-
-# 3. Installare dipendenze
+# 1. Clonare e installare
+git clone <url> BianchiproRestyling && cd BianchiproRestyling
+nvm install 20 && nvm use 20   # oppure installare Node 20 LTS
 npm ci
 
-# 4. Avviare in sviluppo
-npm run dev
-# oppure su Windows: doppio clic su PANNELLO.bat -> premi 1
+# 2. Sviluppo
+npm run dev                     # porta 3000
+# oppure Windows: doppio clic PANNELLO.bat -> 1
 
-# 5. Build produzione
-npm run build
-# Output in cartella build/
+# 3. Build produzione
+npm run build                   # output in build/
+
+# 4. Preview build
+npm start                       # porta 4173
 ```
 
 ### Deploy Netlify
 
-Il deploy e' automatico su push a `main`. Le variabili d'ambiente richieste su Netlify:
+Deploy automatico su push a `main`. Variabili ambiente richieste:
 - `VITE_STRIPE_PUBLISHABLE_KEY` (pk_test_...)
 - `STRIPE_SECRET_KEY` (sk_test_...)
 
 ---
 
-## Contesto SpedizioneFacile (progetto separato)
+## Note per chi continua il lavoro
 
-Il progetto SpedizioneFacile (cartella `tuttoinsieme/` sul Desktop dell'utente) e' un progetto **separato** con architettura Nuxt + Laravel + Caddy. Non fa parte di questa repository.
+### Node version
+Il progetto richiede Node >=20 <23 (`.nvmrc` dice 20, CI usa 20).
+L'utente aveva Node 24 che genera warning `EBADENGINE`.
 
-I punti aperti per SpedizioneFacile (documentati nel report precedente) sono:
-- Normalizzare variabili Nuxt verso origine Caddy 8787
-- Verificare `SANCTUM_STATEFUL_DOMAINS` e `SESSION_DOMAIN` in `.env` Laravel
-- Gestire il 401 "non loggato" come stato normale (non errore) nel modulo nuxt-auth-sanctum SSR
+### `"use client"` nei componenti UI
+36 file ui/ hanno `"use client"` (direttiva Next.js). E' innocua in Vite.
+Non rimuoverla: i componenti shadcn/ui la includono di default e puo'
+servire se il progetto migra a Next.js o se i componenti vengono copiati altrove.
+
+### Supabase Edge Functions
+I file in `src/supabase/functions/server/` sono Deno, non Node.
+Usano `jsr:@supabase/supabase-js@2.49.8`, `npm:hono`, `Deno.serve`.
+Non modificarli nel contesto Vite. Sono gestiti separatamente da Supabase CLI.
+
+### Contesto SpedizioneFacile (progetto separato)
+
+SpedizioneFacile (cartella `tuttoinsieme/` sul Desktop) e' un progetto separato
+con Nuxt + Laravel + Caddy. Non fa parte di questa repository.
+Punti aperti documentati nel report originale dell'utente.

@@ -1,1 +1,4 @@
-_LOG/cloudflared_err.log
+build/
+*.log
+_STATE.json
+_LOGS/
